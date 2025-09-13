@@ -1,4 +1,15 @@
-# Prerequisites
+
+compile_commands.json
+.cache
+
+build*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.cmake
+
+
 *.d
 
 # Compiled Object files
