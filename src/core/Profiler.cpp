@@ -1,6 +1,5 @@
 #include "Profiler.h"
 
-
 namespace instprof {
 
 
@@ -10,8 +9,6 @@ namespace instprof {
     Profiler::Profiler()
     {
         s_Instance = this;
-
-
-
+        Log::Init(); 
     }
 }

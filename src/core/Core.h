@@ -1,6 +1,7 @@
 #pragma once
 
-#if !defined(IP_PLATFORM_LINUX)
+// Just to be safe for now
+#if !defined(IP_PLATFORM_LINUX) && !defined(__x86_64__)
     #error Platform not supported
 #endif
 
