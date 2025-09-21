@@ -11,9 +11,8 @@ namespace instprof {
     /*
         Not thread safe 
         no runtime formatting -> look into std::vformat
-        slow -> Look into fmt::memory_buffer to avoid string allocations
         
-        This shouldn't be exposed to the user or even exist in distribution binaries.
+        This shouldn't exist in distribution binaries.
     */
 
     class Log {
@@ -25,6 +24,9 @@ namespace instprof {
             
             s_Sink = &sink; 
             SetMinLogLevel(Level::Trace);
+
+           //std::ios::sync_with_stdio(false);
+           //std::clog.unsetf(std::ios::unitbuf);
         }
 
         static void SetMinLogLevel(Level lvl) { s_MinLevel = lvl; }
@@ -36,13 +38,6 @@ namespace instprof {
             Write(*s_Sink, lvl, std::format(fmt, std::forward<Args>(args)...));
         }
 
-        // Convenience wrappers -> Macros are better for my use case
-        template<class... A> static void Trace (std::format_string<A...> f, A&&... a){ Dispatch(Level::Trace, f, std::forward<A>(a)...); }
-        template<class... A> static void Info  (std::format_string<A...> f, A&&... a){ Dispatch(Level::Info , f, std::forward<A>(a)...); }
-        template<class... A> static void Warn  (std::format_string<A...> f, A&&... a){ Dispatch(Level::Warn , f, std::forward<A>(a)...); }
-        template<class... A> static void Error (std::format_string<A...> f, A&&... a){ Dispatch(Level::Error, f, std::forward<A>(a)...); }
-        template<class... A> static void Fatal (std::format_string<A...> f, A&&... a){ Dispatch(Level::Fatal, f, std::forward<A>(a)...); }
-        
     private:
         
         static constexpr std::string_view LevelToString(Level lvl) {
@@ -57,10 +52,11 @@ namespace instprof {
             return "?";
         }
 
+        // naive. strace and get it down to 1 syscall
         static void Write(std::ostream& os, Level lvl, std::string_view msg) {
             
             os << "[" << LevelToString(lvl) << "]" << ": " << msg << "\n";
-            os.flush(); // Syscall
+            os.flush(); 
         }
         
     private:
@@ -71,10 +67,22 @@ namespace instprof {
 }
 
 
+#define IP_LOG // temp
+
+#if defined (IP_LOG)
+
 #define IP_TRACE(...) ::instprof::Log::Dispatch(::instprof::Log::Level::Trace, __VA_ARGS__)
 #define IP_INFO(...)  ::instprof::Log::Dispatch(::instprof::Log::Level::Info, __VA_ARGS__)
 #define IP_WARN(...)  ::instprof::Log::Dispatch(::instprof::Log::Level::Warn, __VA_ARGS__)
 #define IP_ERROR(...) ::instprof::Log::Dispatch(::instprof::Log::Level::Error, __VA_ARGS__)
 #define IP_FATAL(...) ::instprof::Log::Dispatch(::instprof::Log::Level::Fatal, __VA_ARGS__)
 
+#else
 
+#define IP_TRACE(...)
+#define IP_INFO(...) 
+#define IP_WARN(...) 
+#define IP_ERROR(...)
+#define IP_FATAL(...)
+
+#endif
