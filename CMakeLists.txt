@@ -26,3 +26,10 @@ if(UNIX AND NOT APPLE)
     target_compile_definitions(InstProf PUBLIC IP_PLATFORM_LINUX)
 endif()
 
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_definitions(InstProf PUBLIC IP_DEBUG)
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
+    target_compile_definitions(InstProf PUBLIC IP_RELEASE)
+endif()
+
+

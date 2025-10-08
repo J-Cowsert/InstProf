@@ -19,7 +19,7 @@ int main()
 
     
     {
-        IP_NAMED_ZONE("Empty Zone");
+        IP_NAMED_SCOPE("Empty Zone");
     }
     
     test_func(); 
