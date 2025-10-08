@@ -8,6 +8,8 @@ namespace instprof {
 
     Profiler::Profiler()
     {
+
+        IP_INFO("Profiler Constructor Called");
         s_Instance = this;
         Log::Init(); 
     }

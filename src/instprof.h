@@ -14,7 +14,7 @@
 
     #include "core/Zone.h"
    
-    #define IP_NAMED_ZONE(name_literal) instprof::ZoneScope IP_CONCAT(_ipZone_, __COUNTER__){ instprof::make_callsite(name_literal) }
+    #define IP_NAMED_SCOPE(name_literal) instprof::ZoneScope IP_CONCAT(_ipZone_, __COUNTER__){ instprof::make_callsite(name_literal) }
     #define IP_FUNC_SCOPE() instprof::ZoneScope IP_CONCAT(_ipZone_, __COUNTER__){ instprof::make_callsite(__func__) }
 
 #else 

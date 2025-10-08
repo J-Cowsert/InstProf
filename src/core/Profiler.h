@@ -2,9 +2,11 @@
 
 #include "Core.h"
 #include "Log.h"
+#include "Assert.h"
 
 #include <cstdint>
 #include <chrono>
+#include <source_location>
 
 #include <time.h>
 
@@ -16,6 +18,20 @@
 
 namespace instprof {
 
+    struct CallsiteInfo {
+
+        std::string_view name; 
+        std::string_view function; 
+        std::string_view file;
+        uint32_t line;
+    };
+
+    IP_FORCE_INLINE constexpr CallsiteInfo make_callsite(std::string_view name, std::source_location loc = std::source_location::current()) noexcept {
+
+        return { name, std::string_view{loc.function_name()}, std::string_view{loc.file_name()}, static_cast<uint32_t>(loc.line()) };
+    }
+
+
     class Profiler {
     public:
 
@@ -24,14 +40,12 @@ namespace instprof {
         
         static Profiler& GetProfiler() { return *s_Instance; }
         
-        static IP_FORCE_INLINE int64_t GetTime() 
-        {
-            #if 0 && defined(__x86_64__)
-                // need to 
-                // ensure invariant TCS
-                // calibrate clock frequency
-                //
+        static IP_FORCE_INLINE int64_t GetTime() {
 
+            #if 0 && defined(__x86_64__)
+                // need to: 
+                //   ensure invariant TCS
+                //   calibrate clock frequency
                 uint64_t rax, rdx;
                 asm volatile("rdtsc" : "=a" (rax), "=d" (rdx));
                 return (int64_t)(rdx << 32) | rax;
