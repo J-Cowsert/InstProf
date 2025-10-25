@@ -1,16 +1,13 @@
 #include "Profiler.h"
 
+#include "core/System.h"
+
 namespace instprof {
 
-
-    Profiler* Profiler::s_Instance = nullptr;
-
-
-    Profiler::Profiler()
+    Profiler::Profiler() 
+        : m_MainThreadID(GetCurrentThreadID())
     {
-
-        IP_INFO("Profiler Constructor Called");
-        s_Instance = this;
-        Log::Init(); 
+        
     }
+
 }

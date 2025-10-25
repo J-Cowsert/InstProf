@@ -2,14 +2,10 @@
 
 #include "Core.h"
 #include "Log.h"
-#include "Assert.h"
 
 #include <cstdint>
-#include <chrono>
 #include <source_location>
-
-#include <time.h>
-
+#include <string_view>
 
 /*
     std::source_location
@@ -20,7 +16,7 @@ namespace instprof {
 
     struct CallsiteInfo {
 
-        std::string_view name; 
+        std::string_view name; // TODO: THIS COULD DANGLE IF NOT PASSED IN AS STR LITERAL
         std::string_view function; 
         std::string_view file;
         uint32_t line;
@@ -37,37 +33,16 @@ namespace instprof {
 
         Profiler();
         ~Profiler() = default;
-        
-        static Profiler& GetProfiler() { return *s_Instance; }
-        
-        static IP_FORCE_INLINE int64_t GetTime() {
 
-            #if 0 && defined(__x86_64__)
-                // need to: 
-                //   ensure invariant TCS
-                //   calibrate clock frequency
-                uint64_t rax, rdx;
-                asm volatile("rdtsc" : "=a" (rax), "=d" (rdx));
-                return (int64_t)(rdx << 32) | rax;
-                
-            #elif defined(IP_PLATFORM_LINUX) && defined(CLOCK_MONOTONIC_RAW)
-                struct timespec ts;
-                clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
-                return int64_t( ts.tv_sec ) * 1000000000ll + int64_t( ts.tv_nsec );
-            #else
-
-                return std::chrono::duration_cast<std::chrono::nanoseconds>( std::chrono::high_resolution_clock::now().time_since_epoch() ).count();
-            #endif
-
-            return 0; // Should be unreachable
-
+        static Profiler& GetProfiler() {
+            
+            static Profiler instance;  
+            return instance;
         }
-
-    private:
         
-        static Profiler* s_Instance;
-
     private:
+
+        uint32_t m_MainThreadID;
 
     };
 
