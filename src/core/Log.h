@@ -52,13 +52,26 @@ namespace instprof {
             return "?";
         }
 
-        // naive. strace and get it down to 1 syscall
+        static constexpr std::string_view LevelColor(Level lvl) {
+            switch (lvl) {
+                case Level::Trace: return "\x1b[90m";
+                case Level::Info:  return "\x1b[97m";
+                case Level::Warn:  return "\x1b[93m";
+                case Level::Error: return "\x1b[91m";
+                case Level::Fatal: return "\x1b[97;41m";
+            }
+            return "\x1b[0m";
+        }
+
         static void Write(std::ostream& os, Level lvl, std::string_view msg) {
             
-            os << "[" << LevelToString(lvl) << "]" << ": " << msg << "\n";
-            os.flush(); 
+            os << LevelColor(lvl)
+               << "[" << LevelToString(lvl) << "]"
+               << ": " << msg << "\n"
+               << "\x1b[0m";
+            os.flush();
         }
-        
+
     private:
 
         inline static Level s_MinLevel = Level::Trace;

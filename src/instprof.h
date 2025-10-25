@@ -20,6 +20,6 @@
 #else 
 
     #define IP_NAMED_ZONE(name_literal)
-    #define IP_FUNC_SCOPE
+    #define IP_FUNC_SCOPE()
     
 #endif
