@@ -4,13 +4,13 @@
 
 namespace instprof {
 
-
     enum class EventType : uint8_t {
         
         ZoneBegin,
         ZoneEnd 
     };
 
+    // TODO: Pack these for better cache alignment
     struct ZoneBegin {
 
         int64_t time;
@@ -24,7 +24,7 @@ namespace instprof {
         uint32_t threadID;
     };
 
-    struct EventHeader {
+    struct EventTag {
 
         union {
             EventType type;
@@ -34,7 +34,7 @@ namespace instprof {
 
     struct EventItem {
 
-        EventHeader header;
+        EventTag tag;
         union {
             ZoneBegin zoneBegin;
             ZoneEnd zoneEnd;
