@@ -1,5 +1,6 @@
 #include "Profiler.h"
 
+#include "Assert.h"
 #include "core/Event.h"
 #include "core/System.h"
 #include "core/Callsite.h"
@@ -7,22 +8,25 @@
 namespace instprof {
 
     Profiler::Profiler() 
-        : m_MainThreadID(GetCurrentThreadID())       
+        : m_MainThreadID(GetCurrentThreadID()), m_Epoch(GetTime())      
     { 
+
+        bool ready = m_TraceExportWorker.Start();
+        IP_ASSERT(ready, "Export worker failed to start");
     }
 
     Profiler::~Profiler() {
 
-        DebugDrainQueue();
+        m_TraceExportWorker.Stop();
     }
 
     // Hotpath
-    void Profiler::EnqueueEvent(const EventItem& e) {
+    void Profiler::EnqueueEvent(const EventItem& event) {
 
-        m_EventQueue.Push(e);
+        m_EventQueue.Push(event);
     }
 
-    void Profiler::DebugDrainQueue() {
+    void Profiler::DebugLogDrainQueue() {
 
         EventItem ev;
         size_t count = 0;
