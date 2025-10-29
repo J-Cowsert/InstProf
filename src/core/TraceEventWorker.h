@@ -20,7 +20,7 @@ namespace instprof {
         void Stop();
 
     private:
-        void Comma() { if (!m_First) std::fputs(",\n", m_File); else m_First = false; }
+        void Comma() { if (!m_First) fputs(",\n", m_File); else m_First = false; }
         void Run();
 
     private:

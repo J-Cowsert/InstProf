@@ -43,4 +43,9 @@ namespace instprof {
         #endif
     }
 
+    IP_FORCE_INLINE uint32_t GetCurrentProcessID() {
+
+        return 0;
+    }
+
 }

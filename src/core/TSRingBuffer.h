@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Assert.h"
+#include "core/Assert.h"
 
 #include <cstddef>
 #include <vector> 
@@ -49,7 +49,7 @@ namespace instprof {
             if (m_Size == 0) return false; 
             out = std::move(m_Buf[m_Head]);
             m_Head = (m_Head + 1) % m_Buf.size();
-            --m_Size;
+            m_Size--;
             lock.unlock();
             m_NotFull.notify_one();
             return true;

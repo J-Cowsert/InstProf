@@ -12,7 +12,7 @@ namespace instprof {
         
         explicit IP_FORCE_INLINE ZoneScope(const CallsiteInfo* info) {
 
-            EventItem e{};
+            EventItem e;
             e.tag.type = EventType::ZoneBegin;
             e.zoneBegin.time         = GetTime();
             e.zoneBegin.callsiteInfo = reinterpret_cast<uint64_t>(info);
@@ -22,7 +22,7 @@ namespace instprof {
 
         IP_FORCE_INLINE ~ZoneScope() {
             
-            EventItem e{};
+            EventItem e;
             e.tag.type = EventType::ZoneEnd;
             e.zoneEnd.time     = GetTime();
             e.zoneEnd.threadID = GetCurrentThreadID();
