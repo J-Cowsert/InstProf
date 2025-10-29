@@ -17,8 +17,8 @@
 #include <vector>
 
 
-static void busy_work_ms(int ms)
-{
+static void busy_work_ms(int ms) {
+
     IP_NAMED_SCOPE("busy_work_ms");
     using namespace std::chrono;
     const auto start = steady_clock::now();
@@ -31,16 +31,16 @@ static void busy_work_ms(int ms)
     (void)s;
 }
 
-static void sleep_ms(int ms)
-{
+static void sleep_ms(int ms) {
+
     IP_NAMED_SCOPE("sleep_ms");
     std::this_thread::sleep_for(std::chrono::milliseconds(ms));
 }
 
 // --- Workloads ---------------------------------------------------------------
 
-static uint64_t fib(int n)
-{
+static uint64_t fib(int n) {
+
     IP_NAMED_SCOPE("fib"); // stress recursion
     if (n <= 1) return n;
     busy_work_ms(0);
@@ -56,12 +56,12 @@ void rec_n2(int n) {
     rec_n2(n - 1);
 }
 
-static void cpu_task(int n)
-{
+static void cpu_task(int n) {
+
     IP_FUNC_SCOPE();
     // Mix recursion + busy spin
     auto f = fib(n);
-    rec_n2(n + 10);
+    //rec_n2(n + 10);
     busy_work_ms(30);
     
     // Some reduction
@@ -69,8 +69,8 @@ static void cpu_task(int n)
     (void)sink;
 }
 
-static void mem_churn(size_t N)
-{
+static void mem_churn(size_t N) {
+
     IP_FUNC_SCOPE();
     std::vector<int> v;
     v.reserve(N);
@@ -87,8 +87,8 @@ static void mem_churn(size_t N)
     }
 }
 
-static void io_task(const std::filesystem::path& p, int lines)
-{
+static void io_task(const std::filesystem::path& p, int lines) {
+
     IP_FUNC_SCOPE();
     std::ofstream out(p, std::ios::binary);
     for (int i = 0; i < lines; ++i) {
@@ -99,8 +99,8 @@ static void io_task(const std::filesystem::path& p, int lines)
     }
 }
 
-static void exc_inner()
-{
+static void exc_inner() {
+
     IP_FUNC_SCOPE();
     // Nested scopes + throw to test unwinding destruction paths
     {
@@ -113,8 +113,8 @@ static void exc_inner()
     }
 }
 
-static void exc_task()
-{
+static void exc_task() {
+
     IP_FUNC_SCOPE();
     try {
         exc_inner();
@@ -125,8 +125,8 @@ static void exc_task()
     }
 }
 
-static void lock_test(std::mutex& mtx, int iters)
-{
+static void lock_test(std::mutex& mtx, int iters) {
+
     IP_FUNC_SCOPE();
     for (int i = 0; i < iters; ++i) {
         {
@@ -143,73 +143,66 @@ static void lock_test(std::mutex& mtx, int iters)
 
 // --- Main Demo ---------------------------------------------------------------
 
-int main()
-{
+int main() {
+
     IP_FUNC_SCOPE();
 
-    // Simple entry spike
     {
-        IP_NAMED_SCOPE("startup");
-        busy_work_ms(20);
-        {
-            IP_NAMED_SCOPE("startup::nested");
-            busy_work_ms(10);
-        }
+        cpu_task(6);
     }
 
-    // Async CPU + memory + exceptions
-    auto f_cpu = std::async(std::launch::async, []{
-        IP_NAMED_SCOPE("async_cpu");
-        cpu_task(22);
-    });
+    // // Async CPU + memory + exceptions
+    // auto f_cpu = std::async(std::launch::async, []{
+    //     IP_NAMED_SCOPE("async_cpu");
+    //     cpu_task(22);
+    // });
 
-    auto f_mem = std::async(std::launch::async, []{
-        IP_NAMED_SCOPE("async_mem");
-        mem_churn(30000);
-    });
+    // auto f_mem = std::async(std::launch::async, []{
+    //     IP_NAMED_SCOPE("async_mem");
+    //     mem_churn(30000);
+    // });
 
-    auto f_exc = std::async(std::launch::async, []{
-        IP_NAMED_SCOPE("async_exc");
-        exc_task();
-    });
+    // auto f_exc = std::async(std::launch::async, []{
+    //     IP_NAMED_SCOPE("async_exc");
+    //     exc_task();
+    // });
 
-    // I/O in parallel
-    std::filesystem::path tmp = std::filesystem::temp_directory_path() / "instprof_demo.txt";
-    auto f_io = std::async(std::launch::async, [tmp]{
-        IP_NAMED_SCOPE("async_io");
-        io_task(tmp, 100);
-    });
+    // // I/O in parallel
+    // std::filesystem::path tmp = std::filesystem::temp_directory_path() / "instprof_demo.txt";
+    // auto f_io = std::async(std::launch::async, [tmp]{
+    //     IP_NAMED_SCOPE("async_io");
+    //     io_task(tmp, 100);
+    // });
 
-    // Some mutex contention across several threads
-    std::mutex mtx;
-    std::vector<std::jthread> lockers;
-    for (int t = 0; t < 4; ++t) {
-        lockers.emplace_back([&, t]{
-            IP_NAMED_SCOPE("locker_thread");
-            lock_test(mtx, 50 + t * 10);
-        });
-    }
+    // // Some mutex contention across several threads
+    // std::mutex mtx;
+    // std::vector<std::jthread> lockers;
+    // for (int t = 0; t < 4; ++t) {
+    //     lockers.emplace_back([&, t]{
+    //         IP_NAMED_SCOPE("locker_thread");
+    //         lock_test(mtx, 50 + t * 10);
+    //     });
+    // }
 
-    // Loop with a per-iteration scope + nested function call
-    for (int i = 0; i < 8; ++i) {
-        IP_NAMED_SCOPE("tick");
-        cpu_task(18);
-        if (i % 3 == 0) sleep_ms(10);
-    }
+    // // Loop with a per-iteration scope + nested function call
+    // for (int i = 0; i < 8; ++i) {
+    //     IP_NAMED_SCOPE("tick");
+    //     cpu_task(18);
+    //     if (i % 3 == 0) sleep_ms(10);
+    // }
 
-    // Lambda with its own zone to test inlined callsites
-    auto lambda = []{
-        IP_NAMED_SCOPE("lambda_task");
-        busy_work_ms(15);
-    };
-    lambda();
+    // // Lambda with its own zone to test inlined callsites
+    // auto lambda = []{
+    //     IP_NAMED_SCOPE("lambda_task");
+    //     busy_work_ms(15);
+    // };
+    // lambda();
 
-    // Join async
-    f_cpu.get();
-    f_mem.get();
-    f_exc.get();
-    f_io.get();
+    // // Join async
+    // f_cpu.get();
+    // f_mem.get();
+    // f_exc.get();
+    // f_io.get();
 
     // std::filesystem::remove(tmp);
-    return 0;
 }
