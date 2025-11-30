@@ -3,7 +3,6 @@
 #include "Core.h"
 
 #include <cstdint>
-#include <chrono> // TODO: shouldnt include unless its actually used
 #include <sys/types.h>
 #include <time.h>
 
@@ -16,7 +15,7 @@ namespace instprof {
     IP_FORCE_INLINE int64_t GetTime() {
 
         #if 0 && defined(__x86_64__)
-            // need to: 
+            // TODO at later date: 
             //   ensure invariant TCS
             //   calibrate clock frequency
             uint64_t rax, rdx;
@@ -28,6 +27,7 @@ namespace instprof {
             clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
             return int64_t( ts.tv_sec ) * 1000000000ll + int64_t( ts.tv_nsec );
         #else
+            #include <chrono> 
             return std::chrono::duration_cast<std::chrono::nanoseconds>( std::chrono::high_resolution_clock::now().time_since_epoch() ).count();
         #endif
 
@@ -45,7 +45,11 @@ namespace instprof {
 
     IP_FORCE_INLINE uint32_t GetCurrentProcessID() {
 
-        return 0;
+        #if defined(IP_PLATFORM_LINUX)
+            return syscall(SYS_getpid);
+        #else
+            #error #error Platform not supported
+        #endif
     }
 
 }
