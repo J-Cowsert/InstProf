@@ -11,8 +11,6 @@ namespace instprof {
     /*
         Not thread safe 
         no runtime formatting -> look into std::vformat
-        
-        This shouldn't exist in distribution binaries.
     */
 
     class Log {
@@ -80,22 +78,24 @@ namespace instprof {
 }
 
 
-#define IP_LOG // temp
+#ifdef IP_DEBUG
+#define IP_LOG // Enable logging macros
+#endif
 
 #if defined (IP_LOG)
 
-#define IP_TRACE(...) ::instprof::Log::Dispatch(::instprof::Log::Level::Trace, __VA_ARGS__)
-#define IP_INFO(...)  ::instprof::Log::Dispatch(::instprof::Log::Level::Info, __VA_ARGS__)
-#define IP_WARN(...)  ::instprof::Log::Dispatch(::instprof::Log::Level::Warn, __VA_ARGS__)
-#define IP_ERROR(...) ::instprof::Log::Dispatch(::instprof::Log::Level::Error, __VA_ARGS__)
-#define IP_FATAL(...) ::instprof::Log::Dispatch(::instprof::Log::Level::Fatal, __VA_ARGS__)
+    #define IP_TRACE(...) ::instprof::Log::Dispatch(::instprof::Log::Level::Trace, __VA_ARGS__)
+    #define IP_INFO(...)  ::instprof::Log::Dispatch(::instprof::Log::Level::Info, __VA_ARGS__)
+    #define IP_WARN(...)  ::instprof::Log::Dispatch(::instprof::Log::Level::Warn, __VA_ARGS__)
+    #define IP_ERROR(...) ::instprof::Log::Dispatch(::instprof::Log::Level::Error, __VA_ARGS__)
+    #define IP_FATAL(...) ::instprof::Log::Dispatch(::instprof::Log::Level::Fatal, __VA_ARGS__)
 
 #else
 
-#define IP_TRACE(...)
-#define IP_INFO(...) 
-#define IP_WARN(...) 
-#define IP_ERROR(...)
-#define IP_FATAL(...)
+    #define IP_TRACE(...)
+    #define IP_INFO(...) 
+    #define IP_WARN(...) 
+    #define IP_ERROR(...)
+    #define IP_FATAL(...)
 
 #endif
