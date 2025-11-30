@@ -1,9 +1,9 @@
-#include <thread>
 
 
 #include "instprof.h"
 
 
+#include <thread>
 #include <chrono>
 #include <cstdint>
 #include <filesystem>
@@ -41,9 +41,8 @@ static void sleep_ms(int ms) {
 
 static uint64_t fib(int n) {
 
-    IP_NAMED_SCOPE("fib"); // stress recursion
+    IP_NAMED_SCOPE("fib");
     if (n <= 1) return n;
-    busy_work_ms(0);
     return fib(n - 1) + fib(n - 2);
 }
 
@@ -59,12 +58,13 @@ void rec_n2(int n) {
 static void cpu_task(int n) {
 
     IP_FUNC_SCOPE();
-    // Mix recursion + busy spin
-    auto f = fib(n);
-    //rec_n2(n + 10);
-    busy_work_ms(30);
     
-    // Some reduction
+    auto f = fib(n);
+    rec_n2(n + 10);
+    
+    busy_work_ms(1);
+    
+    // To avoid compiler optimizations
     volatile long sink = f;
     (void)sink;
 }
@@ -99,32 +99,6 @@ static void io_task(const std::filesystem::path& p, int lines) {
     }
 }
 
-static void exc_inner() {
-
-    IP_FUNC_SCOPE();
-    // Nested scopes + throw to test unwinding destruction paths
-    {
-        IP_NAMED_SCOPE("prepare");
-        busy_work_ms(10);
-    }
-    {
-        IP_NAMED_SCOPE("throw");
-        throw std::runtime_error("boom");
-    }
-}
-
-static void exc_task() {
-
-    IP_FUNC_SCOPE();
-    try {
-        exc_inner();
-    } catch (const std::exception& e) {
-        IP_NAMED_SCOPE("caught");
-        (void)e;
-        busy_work_ms(5);
-    }
-}
-
 static void lock_test(std::mutex& mtx, int iters) {
 
     IP_FUNC_SCOPE();
@@ -147,62 +121,33 @@ int main() {
 
     IP_FUNC_SCOPE();
 
-    {
-        cpu_task(6);
+    // Async CPU + memory
+    auto f_cpu = std::async(std::launch::async, []{
+        IP_NAMED_SCOPE("async_cpu");
+        cpu_task(22);
+    });
+
+    auto f_mem = std::async(std::launch::async, []{
+        IP_NAMED_SCOPE("async_mem");
+        mem_churn(30000);
+    });
+
+    
+    // Loop with a per-iteration scope + nested function call
+    for (int i = 0; i < 8; ++i) {
+        IP_NAMED_SCOPE("tick");
+        cpu_task(18);
+        if (i % 3 == 0) sleep_ms(10);
     }
 
-    // // Async CPU + memory + exceptions
-    // auto f_cpu = std::async(std::launch::async, []{
-    //     IP_NAMED_SCOPE("async_cpu");
-    //     cpu_task(22);
-    // });
+    // Lambda with its own zone to test inlined callsites
+    auto lambda = []{
+        IP_FUNC_SCOPE();
+        busy_work_ms(15);
+    };
+    lambda();
 
-    // auto f_mem = std::async(std::launch::async, []{
-    //     IP_NAMED_SCOPE("async_mem");
-    //     mem_churn(30000);
-    // });
-
-    // auto f_exc = std::async(std::launch::async, []{
-    //     IP_NAMED_SCOPE("async_exc");
-    //     exc_task();
-    // });
-
-    // // I/O in parallel
-    // std::filesystem::path tmp = std::filesystem::temp_directory_path() / "instprof_demo.txt";
-    // auto f_io = std::async(std::launch::async, [tmp]{
-    //     IP_NAMED_SCOPE("async_io");
-    //     io_task(tmp, 100);
-    // });
-
-    // // Some mutex contention across several threads
-    // std::mutex mtx;
-    // std::vector<std::jthread> lockers;
-    // for (int t = 0; t < 4; ++t) {
-    //     lockers.emplace_back([&, t]{
-    //         IP_NAMED_SCOPE("locker_thread");
-    //         lock_test(mtx, 50 + t * 10);
-    //     });
-    // }
-
-    // // Loop with a per-iteration scope + nested function call
-    // for (int i = 0; i < 8; ++i) {
-    //     IP_NAMED_SCOPE("tick");
-    //     cpu_task(18);
-    //     if (i % 3 == 0) sleep_ms(10);
-    // }
-
-    // // Lambda with its own zone to test inlined callsites
-    // auto lambda = []{
-    //     IP_NAMED_SCOPE("lambda_task");
-    //     busy_work_ms(15);
-    // };
-    // lambda();
-
-    // // Join async
-    // f_cpu.get();
-    // f_mem.get();
-    // f_exc.get();
-    // f_io.get();
-
-    // std::filesystem::remove(tmp);
+    // Join async
+    f_cpu.get();
+    f_mem.get();
 }
