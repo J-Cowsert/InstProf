@@ -10,11 +10,11 @@ namespace instprof {
         ZoneEnd 
     };
 
-    // TODO: Pack these for better cache alignment
+    #pragma pack(push, 1)
     struct ZoneBegin {
 
         int64_t time;
-        uint64_t callsiteInfo; // pointer to static callsite metadata
+        uintptr_t callsiteInfo; // pointer to static callsite metadata
         uint32_t threadID;
     };
 
@@ -23,6 +23,7 @@ namespace instprof {
         int64_t time;
         uint32_t threadID;
     };
+    
 
     struct EventTag {
 
@@ -40,5 +41,6 @@ namespace instprof {
             ZoneEnd zoneEnd;
         };
     };
+    #pragma pack(pop)
 
 }
