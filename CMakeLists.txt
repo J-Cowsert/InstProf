@@ -7,7 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED true)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-option(PROF_ENABLE "Enable profiler instrumentation" ON)
+option(IP_ENABLE "Enable profiler instrumentation" ON)
 
 file(GLOB_RECURSE SRC_FILES
      CONFIGURE_DEPENDS
@@ -18,8 +18,8 @@ add_library(InstProf STATIC ${SRC_FILES})
 
 target_include_directories(InstProf PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src/)
 
-if(PROF_ENABLE)
-    target_compile_definitions(InstProf PUBLIC PROF_ENABLE)  
+if(IP_ENABLE)
+    target_compile_definitions(InstProf PUBLIC IP_ENABLE)  
 endif()
 
 if(UNIX AND NOT APPLE)
