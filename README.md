@@ -6,7 +6,6 @@
 
 
 InstProf is a lightweight C++ profiling library that instruments code execution using RAII-based scope tracking. It records timing information for annotated code regions (called "zones") and aggregates statistics. 
-The library uses a producer-consumer architecture where instrumented application threads generate profiling events with minimal overhead, while a dedicated worker thread processes these events asynchronously and builds timing statistics.
 
 
 Primary Use Cases:
@@ -81,12 +80,14 @@ src/core/Core.h
 ### Building
 
 ```bash
-# Clone the repository
 git clone https://github.com/J-Cowser/InstProf
 cd InstProf
 
-# Build the library
-cmake --build build
+mkdir build
+cd build
+
+cmake ..       # configure the project
+cmake --build .   # compile
 ```
 
 #### Build Options Reference
@@ -157,3 +158,14 @@ void my_function() {
 }
 ```
 
+--- 
+
+### Architectural Overview
+
+InstProf follows a producer-consumer architecture where application threads produce profiling events through RAII instrumentation, and a dedicated worker thread consumes and processes these events asynchronously.
+
+![InstProf Overview](assets/InstProf_overview.png)
+
+### Runtime Behavior
+
+![InstProf Runtime](assets/InstProf_runtime.png)
