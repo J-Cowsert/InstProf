@@ -150,4 +150,9 @@ int main() {
     // Join async
     f_cpu.get();
     f_mem.get();
+
+
+    auto ans = fib(18);
+
+    return ans;
 }

@@ -78,9 +78,9 @@ namespace instprof {
 }
 
 
-#ifdef IP_DEBUG
+//#ifdef IP_DEBUG
 #define IP_LOG // Enable logging macros
-#endif
+//#endif
 
 #if defined (IP_LOG)
 

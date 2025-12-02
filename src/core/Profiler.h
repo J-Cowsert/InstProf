@@ -74,6 +74,7 @@ namespace instprof {
     private:
         void DebugLogDrainQueue();
         void DebugLogDumpZones();
+        void DebugLogDumpAggregates();
         
     private:
         uint32_t m_MainThreadID;

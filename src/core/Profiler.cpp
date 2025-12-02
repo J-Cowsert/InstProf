@@ -23,7 +23,7 @@ namespace instprof {
     struct DataBlock {
 
         std::unordered_map<uint32_t, ThreadState> perThreadData;      // <tid, ThreadState>
-        std::unordered_map<uint64_t, AggregateStats> perCallsiteData; // <callsiteInfo ptr, AggregateStats>
+        std::unordered_map<uintptr_t, AggregateStats> perCallsiteData; // <callsiteInfo ptr, AggregateStats>
     };
 
     static DataBlock* s_Data = nullptr;
@@ -41,6 +41,8 @@ namespace instprof {
     Profiler::~Profiler() {
 
         EndWorkerThread();
+
+        DebugLogDumpAggregates();
     
         delete s_Data;
     }
@@ -236,6 +238,57 @@ namespace instprof {
             }
         }
         
+    }
+
+    void Profiler::DebugLogDumpAggregates()
+    {
+        const auto& callsiteMap = s_Data->perCallsiteData;
+
+        if (callsiteMap.empty()) {
+            IP_INFO("[Profiler] No aggregated callsite statistics available.");
+            return;
+        }
+
+        IP_INFO("=== Aggregated Callsite Statistics Dump ===");
+        IP_INFO("Total unique callsites recorded: {}", callsiteMap.size());
+        IP_INFO("{:<10} {:<12} {:<10} {:<10} {:<10} {:<10} {:<48} {:<32} {:<24} {}",
+                "Calls", "TotalIncl(ms)", "AvgIncl(ms)", "MaxIncl(ms)", "TotalSelf(ms)", "AvgSelf(ms)",
+                "Name", "Function", "File", "Line");
+
+        // Sort by total inclusive time descending for better readability in debug output
+        std::vector<std::pair<uintptr_t, AggregateStats>> sortedEntries(
+            callsiteMap.begin(), callsiteMap.end());
+
+        std::sort(sortedEntries.begin(), sortedEntries.end(),
+                [](const auto& a, const auto& b) {
+                    return a.second.totalInclusiveTime > b.second.totalInclusiveTime;
+                });
+
+        for (const auto& [callsitePtr, stats] : sortedEntries) {
+            const CallsiteInfo* cs = reinterpret_cast<const CallsiteInfo*>(callsitePtr);
+
+            const double totalInclMs = static_cast<double>(stats.totalInclusiveTime) / 1e6;
+            const double totalSelfMs = static_cast<double>(stats.totalSelfTime)     / 1e6;
+            const double maxInclMs   = static_cast<double>(stats.maxInclusiveTime)  / 1e6;
+            const double maxSelfMs   = static_cast<double>(stats.maxSelfTime)       / 1e6;
+
+            const double avgInclMs = stats.callCount > 0 ? totalInclMs / stats.callCount : 0.0;
+            const double avgSelfMs = stats.callCount > 0 ? totalSelfMs / stats.callCount : 0.0;
+
+            IP_INFO("{:<10} {:<12.3f} {:<10.3f} {:<10.3f} {:<10.3f} {:<10.3f} {:<48} {:<32} {:<24} {}",
+                    stats.callCount,
+                    totalInclMs,
+                    avgInclMs,
+                    maxInclMs,
+                    totalSelfMs,
+                    avgSelfMs,
+                    cs ? cs->name      : "<null>",
+                    cs ? cs->function  : "<null>",
+                    cs ? cs->file      : "<null>",
+                    cs ? cs->line      : 0);
+        }
+
+        IP_INFO("=== End of Callsite Statistics Dump ===");
     }
 
 }
