@@ -26,7 +26,7 @@ namespace instprof {
 
     struct ActiveZone {
 
-        uint64_t callsiteInfo; // ptr
+        uintptr_t callsiteInfo; // ptr
         int64_t  startTime;
         int64_t  childInclusiveTime = 0; // total time of direct children
         uint16_t depth = 0;

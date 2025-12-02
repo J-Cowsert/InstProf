@@ -13,7 +13,6 @@
     #include "core/Zone.h"
    
     #define IP_NAMED_SCOPE(name_literal) static constinit instprof::CallsiteInfo IP_CONCAT(_ipCs_, __LINE__) = instprof::MakeCallsite((name_literal)); instprof::ZoneScope IP_CONCAT(_ipZone_, __COUNTER__){ &IP_CONCAT(_ipCs_, __LINE__) }
-
     #define IP_FUNC_SCOPE() static constinit instprof::CallsiteInfo IP_CONCAT(_ipCs_, __LINE__) = instprof::MakeCallsite(__func__); instprof::ZoneScope IP_CONCAT(_ipZone_, __COUNTER__){ &IP_CONCAT(_ipCs_, __LINE__) }
 
 #else 
