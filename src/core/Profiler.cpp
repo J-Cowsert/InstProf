@@ -8,6 +8,7 @@
 #include "core/Callsite.h"
 
 #include <cstdint>
+#include <cstring>
 #include <unordered_map>
 #include <fstream>
 
@@ -19,11 +20,39 @@
 
 namespace instprof {
 
+    struct ZoneRecord {
+
+        uintptr_t callsiteInfo;          // TODO: think about some sort of id hash if im to serialize in the future
+        int64_t  startTime;
+        int64_t  endTime;
+        int64_t  inclusiveTime;         // total duration (end-start)
+        int64_t  selfTime;              // duration excluding child zones
+        uint32_t threadID;
+        uint16_t depth;                 // nesting depth
+    };
+
+    struct ActiveZone {
+
+        uintptr_t callsiteInfo; // ptr
+        int64_t  startTime;
+        int64_t  childInclusiveTime = 0; // total time of direct children
+        uint16_t depth = 0;
+    };
+
+    // TODO: think about a better allocation strategy depending on data flow for future iterations (slab, arena)
+    struct ThreadState {
+
+        std::vector<ActiveZone> activeZoneStack{  };    // currently open zones
+        std::vector<ZoneRecord> completedZones{  };     // finalized samples for this thread
+        uint16_t currentDepth = 0;
+
+        ThreadState() { activeZoneStack.reserve(128); completedZones.reserve(8192); }
+    };
+
     // For future iterations look into flat maps for better cache locality
     struct DataBlock {
 
-        std::unordered_map<uint32_t, ThreadState> perThreadData;      // <tid, ThreadState>
-        std::unordered_map<uint64_t, AggregateStats> perCallsiteData; // <callsiteInfo ptr, AggregateStats>
+        std::unordered_map<uint32_t, ThreadState> perThreadData; // <tid, ThreadState>
     };
 
     static DataBlock* s_Data = nullptr;
@@ -48,6 +77,20 @@ namespace instprof {
     void Profiler::EnqueueEvent(const EventItem& event) {
 
         m_EventQueue.Push(event);
+    }
+
+    AggregateStats Profiler::GetStats(const CallsiteInfo* cs) {
+
+        std::lock_guard lock(m_StatsMutex);
+        return cs->stats;
+    }
+
+    CallsiteInfo* Profiler::FindCallsite(const char* name) {
+
+        for (auto** p = &__start_instprof_cs; p < &__stop_instprof_cs; ++p) {
+            if (std::strcmp((*p)->name, name) == 0) return *p;
+        }
+        return nullptr;
     }
 
     bool Profiler::StartWorkerThread() {
@@ -122,13 +165,16 @@ namespace instprof {
                             activeZones.back().childInclusiveTime += rec.inclusiveTime; // propagate child inclusive time to direct parent
                         }
 
-                        // Aggregate Stats
-                        auto& agg = Data->perCallsiteData[rec.callsiteInfo];
-                        agg.totalInclusiveTime += rec.inclusiveTime;
-                        agg.totalSelfTime      += rec.selfTime;
-                        agg.maxInclusiveTime   = std::max(agg.maxInclusiveTime, rec.inclusiveTime);
-                        agg.maxSelfTime        = std::max(agg.maxSelfTime, rec.selfTime);
-                        agg.callCount++;
+                        // Aggregate Stats — written directly into the callsite
+                        {
+                            auto* cs = reinterpret_cast<CallsiteInfo*>(rec.callsiteInfo);
+                            std::lock_guard lock(m_StatsMutex);
+                            cs->stats.totalInclusiveTime += rec.inclusiveTime;
+                            cs->stats.totalSelfTime      += rec.selfTime;
+                            cs->stats.maxInclusiveTime   = std::max(cs->stats.maxInclusiveTime, rec.inclusiveTime);
+                            cs->stats.maxSelfTime        = std::max(cs->stats.maxSelfTime, rec.selfTime);
+                            cs->stats.callCount++;
+                        }
 
                         // Temporary Trace-Event-Format Export for project
                         #if IP_EXPORT_TRACE                                             
@@ -145,8 +191,9 @@ namespace instprof {
                                 << "\"ts\": " << rec.startTime / 1000 << ","
                                 << "\"dur\": " << rec.inclusiveTime / 1000 << ","
                                 << "\"pid\": 0,"
-                                << "\"tid\": " << rec.threadID << ","
-                                << "\"args\": { \"self\": " << rec.selfTime / 1000 << " }"
+                                << "\"tid\": " << rec.threadID << ",";
+
+                            File << "\"args\": { \"self\": " << rec.selfTime / 1000 << " }"
                                 << "}";
                         }
                         #endif

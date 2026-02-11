@@ -1,56 +1,19 @@
 #pragma once
 
 #include "Core.h"
+#include "Callsite.h"
 #include "Event.h"
 #include "TSRingBuffer.h"
 
 #include <cstdint>
 #include <atomic>
+#include <mutex>
 
 /*
     Look into std::stacktrace
 */
 
 namespace instprof {
-
-    struct ZoneRecord {
-
-        uintptr_t callsiteInfo;          // TODO: think about some sort of id hash if im to serialize in the future
-        int64_t  startTime;
-        int64_t  endTime;
-        int64_t  inclusiveTime;         // total duration (end-start)
-        int64_t  selfTime;              // duration excluding child zones
-        uint32_t threadID;
-        uint16_t depth;                 // nesting depth
-    };
-
-    struct ActiveZone {
-
-        uintptr_t callsiteInfo; // ptr
-        int64_t  startTime;
-        int64_t  childInclusiveTime = 0; // total time of direct children
-        uint16_t depth = 0;
-    };
-
-    // TODO: think about a better allocation strategy depending on data flow for future iterations (slab, arena)
-    struct ThreadState {
-
-        std::vector<ActiveZone> activeZoneStack{  };    // currently open zones
-        std::vector<ZoneRecord> completedZones{  };     // finalized samples for this thread
-        uint16_t currentDepth = 0;
-
-        ThreadState() { activeZoneStack.reserve(128); completedZones.reserve(8192); }
-    };
-
-    // Per-Callsite stats
-    struct AggregateStats {
-
-        uint64_t callCount = 0;
-        int64_t  totalInclusiveTime = 0; // total wall-time
-        int64_t  totalSelfTime = 0;
-        int64_t  maxInclusiveTime = 0;
-        int64_t  maxSelfTime = 0;
-    };
 
     class Profiler {
     public:
@@ -60,11 +23,21 @@ namespace instprof {
 
         static Profiler& Get() {
 
-            static Profiler instance;  
+            static Profiler instance;
             return instance;
         }
 
         void EnqueueEvent(const EventItem& event);
+
+        // Thread-safe snapshot of a callsite's stats.
+        AggregateStats GetStats(const CallsiteInfo* cs);
+
+        // One-time name lookup. Cache the returned pointer for repeated access.
+        CallsiteInfo* FindCallsite(const char* name);
+
+        // Iterate all registered callsites (discovered via linker section).
+        template<typename F>
+        void ForEachStat(F&& fn);
 
     private:
         bool StartWorkerThread();
@@ -74,14 +47,31 @@ namespace instprof {
     private:
         void DebugLogDrainQueue();
         void DebugLogDumpZones();
-        
+        void DebugLogDumpAggregates();
+
     private:
         uint32_t m_MainThreadID;
         int64_t m_Epoch;
-        TSRingBuffer<EventItem> m_EventQueue{1024}; // memory used: 1024 * sizeof(EventItem)
+        TSRingBuffer<EventItem> m_EventQueue{1024}; // TODO: Get it to overflow and see what happens
 
         std::atomic<bool> m_Running{false}, m_Stop{false};
         std::thread m_Worker;
+        std::mutex m_StatsMutex;
     };
+
+    // Linker-generated section boundaries — array of CallsiteInfo pointers
+    extern "C" {
+        extern CallsiteInfo* __start_instprof_cs;
+        extern CallsiteInfo* __stop_instprof_cs;
+    }
+
+    template<typename F>
+    void Profiler::ForEachStat(F&& fn) {
+
+        std::lock_guard lock(m_StatsMutex);
+        for (auto** p = &__start_instprof_cs; p < &__stop_instprof_cs; ++p) {
+            fn(*p, (*p)->stats);
+        }
+    }
 
 }
