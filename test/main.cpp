@@ -147,7 +147,37 @@ int main() {
     };
     lambda();
 
+    {
+        IP_NAMED_SCOPE("io_simulation");
+        sleep_ms(20);
+    }
+    {
+        IP_NAMED_SCOPE("cpu_simulation");
+        busy_work_ms(15);
+    }
+
     // Join async
     f_cpu.get();
     f_mem.get();
+
+    // Let the worker drain
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+    auto& profiler = instprof::Profiler::Get();
+
+    // FindCallsite: one-time name lookup, cache the pointer
+    auto* fib_cs = profiler.FindCallsite("fib");
+    if (fib_cs) {
+        auto s = profiler.GetStats(fib_cs);
+        std::cout << std::format("\nfib: {} calls, {:.2f}ms self time\n", s.callCount, s.totalSelfTime / 1e6);
+    }
+
+    // ForEachStat: iterate all callsites
+    std::cout << std::format("\n{:<20} {:>8} {:>10} {:>10}\n", "name", "calls", "incl(ms)", "self(ms)");
+    std::cout << std::string(52, '-') << "\n";
+    profiler.ForEachStat([](const instprof::CallsiteInfo* cs, const instprof::AggregateStats& s) {
+        if (s.callCount == 0) return;
+        std::cout << std::format("{:<20} {:>8} {:>10.2f} {:>10.2f}\n",
+            cs->name, s.callCount, s.totalInclusiveTime / 1e6, s.totalSelfTime / 1e6);
+    });
 }
