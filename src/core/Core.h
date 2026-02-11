@@ -6,6 +6,10 @@
 #endif
 
 
+#define IP_CONCAT_INNER(a, b) a##b
+#define IP_CONCAT(a, b) IP_CONCAT_INNER(a, b)
+
+
 #if defined(__GNUC__)
 	#if defined(__clang__)
 		#define IP_COMPILER_CLANG
