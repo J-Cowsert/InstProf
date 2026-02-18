@@ -27,7 +27,7 @@ Primary Use Cases:
 | Thread-Safe                  | Thread safe queue supports concurrent instrumentation from multiple threads   |
 | Low Overhead                 | Heavy processing happens asynchronously |
 | Nested Zone Support          | Tracks call depth and calculates inclusive vs. self time                   |
-| Per-Callsite Aggregation     | Accumulates statistics (count, total time, max time) for each instrumentation point |
+| Per-Callsite Aggregation     | Accumulates statistics for each instrumentation point |
 | Chrome Trace Export          | Generates iptrace.json for external visualization tools supporting Trace Event Format              |
 
 ---
