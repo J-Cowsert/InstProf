@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <memory>
 #include <unordered_map>
 #include <fstream>
 
@@ -51,18 +52,18 @@ namespace instprof {
 
     // For future iterations look into flat maps for better cache locality
     struct DataBlock {
-
+  
         std::unordered_map<uint32_t, ThreadState> perThreadData; // <tid, ThreadState>
     };
 
-    static DataBlock* s_Data = nullptr;
+    static std::unique_ptr<DataBlock> s_Data = nullptr;  
 
     Profiler::Profiler() 
         : m_MainThreadID(GetCurrentThreadID()), m_Epoch(GetTime())      
     { 
 
         IP_ASSERT(!s_Data, "");
-        s_Data = new DataBlock();
+        s_Data = std::make_unique<DataBlock>();
 
         StartWorkerThread();
     }
@@ -70,8 +71,6 @@ namespace instprof {
     Profiler::~Profiler() {
 
         EndWorkerThread();
-    
-        delete s_Data;
     }
 
     void Profiler::EnqueueEvent(const EventItem& event) {
