@@ -2,6 +2,11 @@
 cmake_minimum_required(VERSION 3.25)
 project(instprof LANGUAGES CXX VERSION 1.0)
 
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    message(STATUS "No build type specified, defaulting to RelWithDebInfo")
+    set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type" FORCE)
+endif()
+
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED true)
 
@@ -30,6 +35,12 @@ if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(InstProf PUBLIC IP_DEBUG)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     target_compile_definitions(InstProf PUBLIC IP_RELEASE)
+endif()
+
+option(IP_BUILD_BENCHMARKS "Build benchmarks (fetches Google Benchmark)" OFF)
+
+if(IP_BUILD_BENCHMARKS)
+    add_subdirectory(bench)
 endif()
 
 

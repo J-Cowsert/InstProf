@@ -12,12 +12,22 @@
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/release",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    },
+    {
+      "name": "bench",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/bench",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "IP_BUILD_BENCHMARKS": "ON"
+      }
     }
   ],
 
   "buildPresets": [
     { "name": "debug",   "configurePreset": "debug" },
-    { "name": "release", "configurePreset": "release" }
+    { "name": "release", "configurePreset": "release" },
+    { "name": "bench",   "configurePreset": "bench" }
   ]
 }
 
