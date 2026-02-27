@@ -24,7 +24,9 @@ add_library(InstProf STATIC ${SRC_FILES})
 target_include_directories(InstProf PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src/)
 
 if(IP_ENABLE)
-    target_compile_definitions(InstProf PUBLIC IP_ENABLE)  
+    target_compile_definitions(InstProf PUBLIC IP_ENABLE=1)
+else()
+    target_compile_definitions(InstProf PUBLIC IP_ENABLE=0)
 endif()
 
 if(UNIX AND NOT APPLE)
