@@ -17,42 +17,33 @@ namespace instprof {
 
     class Profiler {
     public:
-
-        Profiler();
-        ~Profiler();
-
         static Profiler& Get() {
 
             static Profiler instance;
             return instance;
         }
 
+        Profiler(const Profiler&) = delete;
+        Profiler& operator=(const Profiler&) = delete;
+        Profiler(Profiler&&) = delete;
+        Profiler& operator=(Profiler&&) = delete;
+
         void EnqueueEvent(const EventItem& event);
 
-        // Thread-safe snapshot of a callsite's stats.
-        AggregateStats GetStats(const CallsiteInfo* cs);
-
-        // One-time name lookup. Cache the returned pointer for repeated access.
-        CallsiteInfo* FindCallsite(const char* name);
-
-        // Iterate all registered callsites (discovered via linker section).
-        template<typename F>
-        void ForEachStat(F&& fn);
+    private:
+        Profiler();
+        ~Profiler();
 
     private:
         bool StartWorkerThread();
         void EndWorkerThread();
         void ProcessEvents();
-
-    private:
-        void DebugLogDrainQueue();
-        void DebugLogDumpZones();
-        void DebugLogDumpAggregates();
+        void PrintStatsReport();
 
     private:
         uint32_t m_MainThreadID;
         int64_t m_Epoch;
-        TSRingBuffer<EventItem> m_EventQueue{1024}; // TODO: Get it to overflow and see what happens
+        TSRingBuffer<EventItem> m_EventQueue{1024}; 
 
         std::atomic<bool> m_Running{false}, m_Stop{false};
         std::thread m_Worker;
@@ -63,15 +54,6 @@ namespace instprof {
     extern "C" {
         extern CallsiteInfo* __start_instprof_cs;
         extern CallsiteInfo* __stop_instprof_cs;
-    }
-
-    template<typename F>
-    void Profiler::ForEachStat(F&& fn) {
-
-        std::lock_guard lock(m_StatsMutex);
-        for (auto** p = &__start_instprof_cs; p < &__stop_instprof_cs; ++p) {
-            fn(*p, (*p)->stats);
-        }
     }
 
 }

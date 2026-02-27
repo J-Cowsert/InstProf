@@ -7,10 +7,13 @@
 #include "core/System.h"
 #include "core/Callsite.h"
 
+#include <algorithm>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <memory>
 #include <unordered_map>
+#include <vector>
 #include <fstream>
 
 
@@ -71,27 +74,14 @@ namespace instprof {
     Profiler::~Profiler() {
 
         EndWorkerThread();
+        PrintStatsReport();
     }
 
     void Profiler::EnqueueEvent(const EventItem& event) {
 
         m_EventQueue.Push(event);
     }
-
-    AggregateStats Profiler::GetStats(const CallsiteInfo* cs) {
-
-        std::lock_guard lock(m_StatsMutex);
-        return cs->stats;
-    }
-
-    CallsiteInfo* Profiler::FindCallsite(const char* name) {
-
-        for (auto** p = &__start_instprof_cs; p < &__stop_instprof_cs; ++p) {
-            if (std::strcmp((*p)->name, name) == 0) return *p;
-        }
-        return nullptr;
-    }
-
+    
     bool Profiler::StartWorkerThread() {
 
         if (m_Running.load()) return false;
@@ -215,73 +205,78 @@ namespace instprof {
     #endif
     }
 
-    void Profiler::DebugLogDrainQueue() {
+    static int FormatTime(int64_t ns, char* buf, size_t len) {
 
-        EventItem ev;
-        size_t count = 0;
-
-        while (m_EventQueue.TryPop(ev)) {
-            
-            switch (ev.tag.type) {
-
-                case EventType::ZoneBegin: {
-                    const auto* cs = reinterpret_cast<const CallsiteInfo*>(ev.zoneBegin.callsiteInfo);
-                    IP_INFO("[EventItem] ZoneBegin t={} thread={} name='{}' func='{}' file='{}' line={}",
-                        ev.zoneBegin.time,
-                        ev.zoneBegin.threadID,
-                        cs ? cs->name : "<null>",
-                        cs ? cs->function : "<null>",
-                        cs ? cs->file : "<null>",
-                        cs ? cs->line : 0
-                    );
-                    break;
-                }
-
-                case EventType::ZoneEnd: {
-                    IP_INFO("[EventItem] ZoneEnd t={} thread={}",
-                        ev.zoneEnd.time,
-                        ev.zoneEnd.threadID
-                    );
-                    break;
-                }
-
-                default: {
-                    IP_WARN("[EventItem] Unknown event type ({})", static_cast<int>(ev.tag.type));
-                    break;
-                }
-            }
-
-            count++;
-        }
-
-        IP_INFO("DebugDrainQueue: Drained {} event(s).", count);
+        if (ns < 1'000)
+            return snprintf(buf, len, "%6lld ns", (long long)ns);
+        if (ns < 1'000'000)
+            return snprintf(buf, len, "%6.1f us", ns / 1e3);
+        if (ns < 1'000'000'000)
+            return snprintf(buf, len, "%6.1f ms", ns / 1e6);
+        return snprintf(buf, len, "%6.3f s ", ns / 1e9);
     }
 
-    void Profiler::DebugLogDumpZones() {
+    void Profiler::PrintStatsReport() {
 
-        for (auto& [tid, tState] : s_Data->perThreadData) {
-            
-            const auto& zones = tState.completedZones;
+        CallsiteInfo** begin = &__start_instprof_cs;
+        CallsiteInfo** end   = &__stop_instprof_cs;
 
-            for (const auto& r : zones) {
+        struct Entry { CallsiteInfo* cs; };
+        std::vector<Entry> entries;
 
-                const auto* cs = reinterpret_cast<const CallsiteInfo*>(r.callsiteInfo);
-
-                IP_INFO("[ZoneRecord] tid={} depth={} start={} end={} incl={:.3f} ms self={:.3f} ms name='{}' func='{}' file='{}' line={}",
-                    r.threadID,
-                    r.depth,
-                    r.startTime,
-                    r.endTime,
-                    static_cast<double>(r.inclusiveTime) / 1e6,
-                    static_cast<double>(r.selfTime) / 1e6,
-                    cs ? cs->name : "<null>",
-                    cs ? cs->function : "<null>",
-                    cs ? cs->file : "<null>",
-                    cs ? cs->line : 0
-                );
-            }
+        for (auto** it = begin; it < end; ++it) {
+            if (*it && (*it)->stats.callCount > 0)
+                entries.push_back({*it});
         }
-        
+
+        if (entries.empty()) return;
+
+        std::sort(entries.begin(), entries.end(), [](const Entry& a, const Entry& b) {
+            return a.cs->stats.totalSelfTime > b.cs->stats.totalSelfTime;
+        });
+
+        const char* hdr  = "  %-24s %8s   %-10s %-10s %-10s %-10s %-10s %-10s\n";
+        const char* row  = "  %-24s %8lu   %-10s %-10s %-10s %-10s %-10s %-10s\n";
+        const char* line = "  ──────────────────────────────────────────────────────────────────────────────────────────────────\n";
+
+        fprintf(stderr, "\n%s", line);
+        fprintf(stderr, "  instprof — Session Statistics  (sorted by total self time)\n");
+        fprintf(stderr, "%s", line);
+        fprintf(stderr, hdr,
+            "Name", "Calls",
+            "Self Tot", "Self Avg", "Self Max",
+            "Incl Tot", "Incl Avg", "Incl Max");
+        fprintf(stderr, "%s", line);
+
+        uint64_t totalCalls = 0;
+
+        for (auto& [cs] : entries) {
+            auto& s = cs->stats;
+            totalCalls += s.callCount;
+
+            int64_t avgSelf = s.totalSelfTime      / (int64_t)s.callCount;
+            int64_t avgIncl = s.totalInclusiveTime  / (int64_t)s.callCount;
+
+            char st[16], sa[16], sm[16], it[16], ia[16], im[16];
+            FormatTime(s.totalSelfTime,      st, sizeof(st));
+            FormatTime(avgSelf,              sa, sizeof(sa));
+            FormatTime(s.maxSelfTime,        sm, sizeof(sm));
+            FormatTime(s.totalInclusiveTime, it, sizeof(it));
+            FormatTime(avgIncl,              ia, sizeof(ia));
+            FormatTime(s.maxInclusiveTime,   im, sizeof(im));
+
+            fprintf(stderr, row,
+                cs->name, (unsigned long)s.callCount,
+                st, sa, sm, it, ia, im);
+        }
+
+        fprintf(stderr, "%s", line);
+        fprintf(stderr, "  %zu callsite(s), %lu total call(s)\n",
+            entries.size(), (unsigned long)totalCalls);
+    #if IP_EXPORT_TRACE
+        fprintf(stderr, "\n  Trace exported to iptrace.json — view at https://ui.perfetto.dev\n");
+    #endif
+        fprintf(stderr, "%s\n", line);
     }
 
 }
