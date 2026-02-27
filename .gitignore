@@ -50,3 +50,6 @@ Makefile
 
 # debug information files
 *.dwo
+
+# Benchmark results
+bench/results/
