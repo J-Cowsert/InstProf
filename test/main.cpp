@@ -119,6 +119,7 @@ static void lock_test(std::mutex& mtx, int iters) {
 
 int main() {
 
+    auto wall_start = std::chrono::steady_clock::now();
     IP_FUNC_SCOPE();
 
     // Async CPU + memory
@@ -133,6 +134,12 @@ int main() {
     });
 
     
+    {
+        IP_NAMED_SCOPE("Timer");
+
+        std::this_thread::sleep_for(std::chrono::microseconds(15));
+    }
+
     // Loop with a per-iteration scope + nested function call
     for (int i = 0; i < 8; ++i) {
         IP_NAMED_SCOPE("tick");
@@ -160,24 +167,7 @@ int main() {
     f_cpu.get();
     f_mem.get();
 
-    // Let the worker drain
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
-
-    auto& profiler = instprof::Profiler::Get();
-
-    // FindCallsite: one-time name lookup, cache the pointer
-    auto* fib_cs = profiler.FindCallsite("fib");
-    if (fib_cs) {
-        auto s = profiler.GetStats(fib_cs);
-        std::cout << std::format("\nfib: {} calls, {:.2f}ms self time\n", s.callCount, s.totalSelfTime / 1e6);
-    }
-
-    // ForEachStat: iterate all callsites
-    std::cout << std::format("\n{:<20} {:>8} {:>10} {:>10}\n", "name", "calls", "incl(ms)", "self(ms)");
-    std::cout << std::string(52, '-') << "\n";
-    profiler.ForEachStat([](const instprof::CallsiteInfo* cs, const instprof::AggregateStats& s) {
-        if (s.callCount == 0) return;
-        std::cout << std::format("{:<20} {:>8} {:>10.2f} {:>10.2f}\n",
-            cs->name, s.callCount, s.totalInclusiveTime / 1e6, s.totalSelfTime / 1e6);
-    });
+    auto wall_end = std::chrono::steady_clock::now();
+    auto elapsed = std::chrono::duration<double, std::milli>(wall_end - wall_start).count();
+    std::cerr << "\n  main() wall time: " << elapsed << " ms\n";
 }
