@@ -1,10 +1,5 @@
 #pragma once
 
-// User Toggles
-#ifndef IP_ENABLE
-    #define IP_ENABLE 1
-#endif
-
 #if IP_ENABLE
 
     #include "core/Zone.h"
