@@ -10,7 +10,6 @@ namespace instprof {
         ZoneEnd 
     };
 
-    #pragma pack(push, 1)
     struct ZoneBegin {
 
         int64_t time;
@@ -41,6 +40,5 @@ namespace instprof {
             ZoneEnd zoneEnd;
         };
     };
-    #pragma pack(pop)
 
 }
