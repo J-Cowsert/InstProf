@@ -43,7 +43,7 @@ namespace instprof {
         uint16_t depth = 0;
     };
 
-    // TODO: think about a better allocation strategy depending on data flow for future iterations (slab, arena)
+    // TODO: implement a better allocation strategy depending on data flow for future iterations (slab, arena)
     struct ThreadState {
 
         std::vector<ActiveZone> activeZoneStack{  };    // currently open zones
@@ -53,7 +53,7 @@ namespace instprof {
         ThreadState() { activeZoneStack.reserve(128); completedZones.reserve(8192); }
     };
 
-    // For future iterations look into flat maps for better cache locality
+    // TODO: flat maps for better cache locality
     struct DataBlock {
   
         std::unordered_map<uint32_t, ThreadState> perThreadData; // <tid, ThreadState>
@@ -157,7 +157,6 @@ namespace instprof {
                         // Aggregate Stats — written directly into the callsite
                         {
                             auto* cs = reinterpret_cast<CallsiteInfo*>(rec.callsiteInfo);
-                            std::lock_guard lock(m_StatsMutex);
                             cs->stats.totalInclusiveTime += rec.inclusiveTime;
                             cs->stats.totalSelfTime      += rec.selfTime;
                             cs->stats.maxInclusiveTime   = std::max(cs->stats.maxInclusiveTime, rec.inclusiveTime);
@@ -195,7 +194,7 @@ namespace instprof {
 
                 if (m_Stop.load()) break; 
                 //std::this_thread::yield();
-                std::this_thread::sleep_for(std::chrono::microseconds(100));
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
             }
         }
 

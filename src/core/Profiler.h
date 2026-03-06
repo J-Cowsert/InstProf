@@ -7,7 +7,7 @@
 
 #include <cstdint>
 #include <atomic>
-#include <mutex>
+#include <thread>
 
 /*
     Look into std::stacktrace
@@ -47,7 +47,6 @@ namespace instprof {
 
         std::atomic<bool> m_Running{false}, m_Stop{false};
         std::thread m_Worker;
-        std::mutex m_StatsMutex;
     };
 
     // Linker-generated section boundaries — array of CallsiteInfo pointers
