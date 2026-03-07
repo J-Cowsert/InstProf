@@ -17,6 +17,7 @@
 #include <vector>
 
 
+
 static void busy_work_ms(int ms) {
 
     IP_NAMED_SCOPE("busy_work_ms");
@@ -122,12 +123,12 @@ int main() {
     auto wall_start = std::chrono::steady_clock::now();
     IP_FUNC_SCOPE();
 
-    // Async CPU + memory
-    auto f_cpu = std::async(std::launch::async, []{
-        IP_NAMED_SCOPE("async_cpu");
-        cpu_task(22);
-    });
-
+    // // Async CPU + memory
+    // auto f_cpu = std::async(std::launch::async, []{
+    //     IP_NAMED_SCOPE("async_cpu");
+    //     cpu_task(22);
+    // });
+    //
     auto f_mem = std::async(std::launch::async, []{
         IP_NAMED_SCOPE("async_mem");
         mem_churn(30000);
@@ -143,7 +144,7 @@ int main() {
     // Loop with a per-iteration scope + nested function call
     for (int i = 0; i < 8; ++i) {
         IP_NAMED_SCOPE("tick");
-        cpu_task(18);
+        //cpu_task(18);
         if (i % 3 == 0) sleep_ms(10);
     }
 
@@ -164,7 +165,7 @@ int main() {
     }
 
     // Join async
-    f_cpu.get();
+    // f_cpu.get();
     f_mem.get();
 
     auto wall_end = std::chrono::steady_clock::now();
