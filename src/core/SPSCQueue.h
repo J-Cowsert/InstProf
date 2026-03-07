@@ -47,8 +47,8 @@ namespace instprof {
         T* m_Data;
 
         // False Sharing
-        alignas(64) std::atomic<size_t> m_Head = 0;
-        alignas(64) std::atomic<size_t> m_Tail = 0;
+        alignas(128) std::atomic<size_t> m_Head = 0;
+        alignas(128) std::atomic<size_t> m_Tail = 0;
     };
 
 }
