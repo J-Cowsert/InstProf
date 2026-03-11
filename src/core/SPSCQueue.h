@@ -21,34 +21,36 @@ namespace instprof {
         
         ~SPSCQueue() { delete[] m_Data; }
 
+        SPSCQueue(const SPSCQueue&) = delete;
+        SPSCQueue& operator=(const SPSCQueue&) = delete;
+        SPSCQueue(SPSCQueue&&) = delete;
+        SPSCQueue& operator=(SPSCQueue&&) = delete;
+
         bool TryPush(T value) {
 
-            size_t head = m_Head.load();
+            size_t head = m_Head.load(std::memory_order_relaxed);
             size_t next = (head + 1) & (Capacity - 1);
-            if (next == m_Tail.load()) return false;
+            if (next == m_Tail.load(std::memory_order_acquire)) return false;
             m_Data[head] = value;
-            m_Head.store(next);
+            m_Head.store(next, std::memory_order_release);
             return true;
         }
-
         
         bool TryPop(T& out) {
             
-            size_t tail = m_Tail.load();
-            if (tail == m_Head.load()) return false;
+            size_t tail = m_Tail.load(std::memory_order_relaxed);
+            if (tail == m_Head.load(std::memory_order_acquire)) return false;
             out = m_Data[tail];
-            m_Tail.store((tail + 1) & (Capacity - 1));
+            m_Tail.store((tail + 1) & (Capacity - 1), std::memory_order_release);
             return true;
         }
 
     private:
 
-
         T* m_Data;
-
-        // False Sharing
-        alignas(128) std::atomic<size_t> m_Head = 0;
-        alignas(128) std::atomic<size_t> m_Tail = 0;
+        
+        alignas(64) std::atomic<size_t> m_Head = 0;
+        alignas(64) std::atomic<size_t> m_Tail = 0;
     };
 
 }
