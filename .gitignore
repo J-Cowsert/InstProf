@@ -53,3 +53,8 @@ Makefile
 
 # Benchmark results
 bench/results/
+
+# Profiler artifacts
+iptrace.json
+perf.data
+perf.data.old
