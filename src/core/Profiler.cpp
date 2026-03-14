@@ -8,17 +8,20 @@
 #include "core/Callsite.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <memory>
+#include <mutex>
+#include <thread>
 #include <unordered_map>
 #include <vector>
 #include <fstream>
 
 
 #ifndef IP_EXPORT_TRACE 
-    #define IP_EXPORT_TRACE 1
+    #define IP_EXPORT_TRACE 0
 #endif
 
 
@@ -75,11 +78,8 @@ namespace instprof {
 
         EndWorkerThread();
         PrintStatsReport();
-    }
 
-    void Profiler::EnqueueEvent(const EventItem& event) {
-
-        m_EventQueue.Push(event);
+        std::cerr << m_PushFailCount << std::endl;
     }
     
     bool Profiler::StartWorkerThread() {
@@ -111,90 +111,106 @@ namespace instprof {
 
         auto& Data = s_Data;
         EventItem ev;
+        std::vector<ThreadEntry*> snapshot;
+
+        //  Implement a batch size to take advantage of cache locality
 
         for (;;) {
 
-            if (m_EventQueue.TryPop(ev)) {
+            bool workFound = false;
 
-                switch (ev.tag.type) {
+            {
+                std::lock_guard<std::mutex> lock(m_RegistrationMutex);
+                snapshot = m_ThreadEntries;
+            }
 
-                    case EventType::ZoneBegin:
-                    {
-                        auto& tState = Data->perThreadData[ev.zoneBegin.threadID];
-                        auto& activeZones = tState.activeZoneStack;
+            for (auto* t : snapshot) {
 
-                        auto& az = activeZones.emplace_back();
-                        az.startTime          = ev.zoneBegin.time;
-                        az.callsiteInfo       = ev.zoneBegin.callsiteInfo;
-                        az.childInclusiveTime = 0;
-                        az.depth              = (uint32_t)activeZones.size() - 1; // 0-based depth
+                while (t->EventQueue.TryPop(ev)) {
 
-                        break;
-                    }
-
-                    case EventType::ZoneEnd:
-                    {
-                        auto& tState = Data->perThreadData[ev.zoneEnd.threadID];
-                        auto& activeZones = tState.activeZoneStack;
-
-                        auto az = activeZones.back(); // Copy top of active stack
-                        activeZones.pop_back(); // remove zone
-
-                        auto& rec = tState.completedZones.emplace_back();
-                        rec.startTime     = az.startTime;
-                        rec.endTime       = ev.zoneEnd.time;
-                        rec.callsiteInfo  = az.callsiteInfo;
-                        rec.threadID      = ev.zoneEnd.threadID;
-                        rec.depth         = activeZones.size(); // depth after pop
-                        rec.inclusiveTime = rec.endTime - rec.startTime;
-                        rec.selfTime      = rec.inclusiveTime - az.childInclusiveTime;
-                        
-                        if (!activeZones.empty()) {
-
-                            activeZones.back().childInclusiveTime += rec.inclusiveTime; // propagate child inclusive time to direct parent
-                        }
-
-                        // Aggregate Stats — written directly into the callsite
+                    workFound = true;
+    
+                    switch (ev.tag.type) {
+    
+                        case EventType::ZoneBegin:
                         {
-                            auto* cs = reinterpret_cast<CallsiteInfo*>(rec.callsiteInfo);
-                            std::lock_guard lock(m_StatsMutex);
-                            cs->stats.totalInclusiveTime += rec.inclusiveTime;
-                            cs->stats.totalSelfTime      += rec.selfTime;
-                            cs->stats.maxInclusiveTime   = std::max(cs->stats.maxInclusiveTime, rec.inclusiveTime);
-                            cs->stats.maxSelfTime        = std::max(cs->stats.maxSelfTime, rec.selfTime);
-                            cs->stats.callCount++;
+                            auto& tState = Data->perThreadData[ev.zoneBegin.threadID];
+                            auto& activeZones = tState.activeZoneStack;
+    
+                            auto& az = activeZones.emplace_back();
+                            az.startTime          = ev.zoneBegin.time;
+                            az.callsiteInfo       = ev.zoneBegin.callsiteInfo;
+                            az.childInclusiveTime = 0;
+                            az.depth              = (uint32_t)activeZones.size() - 1; // 0-based depth
+    
+                            break;
                         }
+    
+                        case EventType::ZoneEnd:
+                        {
+                            auto& tState = Data->perThreadData[ev.zoneEnd.threadID];
+                            auto& activeZones = tState.activeZoneStack;
 
-                        // Temporary Trace-Event-Format Export for project
-                        #if IP_EXPORT_TRACE                                             
-                        if (first) { File << "[\n"; first = false; }
-                        else       { File << ",\n"; }
+                            if (activeZones.empty()) break; // guard against mismatched begin/end
+    
+                            auto az = activeZones.back();
+                            activeZones.pop_back();
+    
+                            auto& rec = tState.completedZones.emplace_back();
+                            rec.startTime     = az.startTime;
+                            rec.endTime       = ev.zoneEnd.time;
+                            rec.callsiteInfo  = az.callsiteInfo;
+                            rec.threadID      = ev.zoneEnd.threadID;
+                            rec.depth         = activeZones.size();
+                            rec.inclusiveTime = rec.endTime - rec.startTime;
+                            rec.selfTime      = rec.inclusiveTime - az.childInclusiveTime;
+                            
+                            if (!activeZones.empty()) {
+    
+                                activeZones.back().childInclusiveTime += rec.inclusiveTime;
+                            }
+    
+                            // Aggregate Stats — written directly into the callsite
+                            {
+                                auto* cs = reinterpret_cast<CallsiteInfo*>(rec.callsiteInfo);
+                                cs->stats.totalInclusiveTime += rec.inclusiveTime;
+                                cs->stats.totalSelfTime      += rec.selfTime;
+                                cs->stats.maxInclusiveTime   = std::max(cs->stats.maxInclusiveTime, rec.inclusiveTime);
+                                cs->stats.maxSelfTime        = std::max(cs->stats.maxSelfTime, rec.selfTime);
+                                cs->stats.callCount++;
+                            }
+    
+                            // Temporary Trace-Event-Format Export for project
+                            #if IP_EXPORT_TRACE                                             
+                            if (first) { File << "[\n"; first = false; }
+                            else       { File << ",\n"; }
+    
+                            if (File.is_open()) {
+                                const auto* cs = reinterpret_cast<const CallsiteInfo*>(rec.callsiteInfo);
+    
+                                File << "  {"
+                                    << "\"name\": \"" << (cs ? cs->name : "unknown") << "\","
+                                    << "\"cat\": \"function\","
+                                    << "\"ph\": \"X\","
+                                    << "\"ts\": " << rec.startTime / 1000 << ","
+                                    << "\"dur\": " << rec.inclusiveTime / 1000 << ","
+                                    << "\"pid\": 0,"
+                                    << "\"tid\": " << rec.threadID << ",";
+    
+                                File << "\"args\": { \"self\": " << rec.selfTime / 1000 << " }"
+                                    << "}";
+                            }
+                            #endif
+    
+                            break;
+                        } 
+                    }
+                } 
+            }
 
-                        if (File.is_open()) {
-                            const auto* cs = reinterpret_cast<const CallsiteInfo*>(rec.callsiteInfo);
+            if (!workFound) {
 
-                            File << "  {"
-                                << "\"name\": \"" << (cs ? cs->name : "unknown") << "\","
-                                << "\"cat\": \"function\","
-                                << "\"ph\": \"X\","
-                                << "\"ts\": " << rec.startTime / 1000 << ","
-                                << "\"dur\": " << rec.inclusiveTime / 1000 << ","
-                                << "\"pid\": 0,"
-                                << "\"tid\": " << rec.threadID << ",";
-
-                            File << "\"args\": { \"self\": " << rec.selfTime / 1000 << " }"
-                                << "}";
-                        }
-                        #endif
-
-                        break;
-                    } 
-                }
-            } 
-            else {
-
-                if (m_Stop.load()) break; 
-                //std::this_thread::yield();
+                if (m_Stop.load()) break;
                 std::this_thread::sleep_for(std::chrono::microseconds(100));
             }
         }
