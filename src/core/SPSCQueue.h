@@ -12,14 +12,7 @@ namespace instprof {
     class SPSCQueue
     {
     public:
-        SPSCQueue()
-            : m_Data(new T[Capacity])
-        {
-            static_assert(Capacity > 0, "Capacity must be greater than zero");
-            static_assert((Capacity & (Capacity - 1)) == 0, "Capacity must be a power of two");
-        }
-        
-        ~SPSCQueue() { delete[] m_Data; }
+        SPSCQueue() = default;
 
         SPSCQueue(const SPSCQueue&) = delete;
         SPSCQueue& operator=(const SPSCQueue&) = delete;
@@ -46,8 +39,11 @@ namespace instprof {
         }
 
     private:
+        static_assert(Capacity > 0, "Capacity must be greater than zero");
+        static_assert((Capacity & (Capacity - 1)) == 0, "Capacity must be a power of two");
 
-        T* m_Data;
+        // T* m_Data;
+        T m_Data[Capacity];
         
         alignas(64) std::atomic<size_t> m_Head = 0;
         alignas(64) std::atomic<size_t> m_Tail = 0;
