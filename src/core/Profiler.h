@@ -18,10 +18,39 @@
 
 namespace instprof {
 
+
+    struct ZoneRecord {
+
+        uintptr_t callsiteInfo;          // TODO: think about some sort of id hash if im to serialize in the future
+        int64_t  startTime;
+        int64_t  endTime;
+        int64_t  inclusiveTime;         // total duration (end-start)
+        int64_t  selfTime;              // duration excluding child zones
+        uint32_t threadID;
+        uint16_t depth;                 // nesting depth
+    };
+
+    struct ActiveZone {
+
+        uintptr_t callsiteInfo; // ptr
+        int64_t  startTime;
+        int64_t  childInclusiveTime = 0; // total time of direct children
+        uint16_t depth = 0;
+    };
+
+    // TODO: think about a better allocation strategy depending on data flow for future iterations (slab, arena)
+    struct ThreadState {
+
+        std::vector<ZoneRecord> completedZones{  };     // finalized samples for this thread
+        std::vector<ActiveZone> activeZoneStack{  };    // currently open zones
+        uint16_t currentDepth = 0;
+    };
+
     struct ThreadEntry {
 
-        uint32_t ThreadID;
         SPSCQueue<EventItem, 4096> EventQueue;
+        ThreadState State; 
+        uint32_t ThreadID;
     };
 
     class Profiler {
@@ -39,10 +68,10 @@ namespace instprof {
 
         IP_FORCE_INLINE void EnqueueEvent(const EventItem& event) {
             
-            thread_local ThreadEntry* s = nullptr;
-            if (!s) [[unlikely]] s = RegisterThread();
+            thread_local ThreadEntry* entry = nullptr;
+            if (!entry) [[unlikely]] entry = RegisterThread();
 
-            while (!s->EventQueue.TryPush(event)) { m_PushFailCount.fetch_add(1, std::memory_order_relaxed); }
+            while (!entry->EventQueue.TryPush(event)) { m_PushFailCount.fetch_add(1, std::memory_order_relaxed); }
         }
 
     private:
@@ -53,8 +82,8 @@ namespace instprof {
         ThreadEntry* RegisterThread() {
 
             ThreadEntry* entry = new ThreadEntry{
-                .ThreadID = GetCurrentThreadID(), 
-                .EventQueue = {}
+                .EventQueue = {},
+                .ThreadID = GetCurrentThreadID()
             };
 
             {
@@ -73,15 +102,14 @@ namespace instprof {
         void PrintStatsReport();
         
     private:
-        uint32_t m_MainThreadID;
-        int64_t m_Epoch;
-
-        std::atomic<bool> m_Running{false}, m_Stop{false}; // m_running doesnt need to be atomic
-        std::thread m_Worker;
-     
         std::mutex m_RegistrationMutex;
         std::vector<ThreadEntry*> m_ThreadEntries;
 
+        std::thread m_Worker;
+        std::atomic<bool> m_Running{false}, m_Stop{false}; // m_running doesnt need to be atomic
+
+        int64_t m_Epoch;
+        uint32_t m_MainThreadID;
 
         // Debug
         std::atomic<uint64_t> m_PushFailCount{0};

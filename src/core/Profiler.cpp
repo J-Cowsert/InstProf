@@ -12,10 +12,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include <memory>
 #include <mutex>
 #include <thread>
-#include <unordered_map>
 #include <vector>
 #include <fstream>
 
@@ -27,49 +25,11 @@
 
 namespace instprof {
 
-    struct ZoneRecord {
-
-        uintptr_t callsiteInfo;          // TODO: think about some sort of id hash if im to serialize in the future
-        int64_t  startTime;
-        int64_t  endTime;
-        int64_t  inclusiveTime;         // total duration (end-start)
-        int64_t  selfTime;              // duration excluding child zones
-        uint32_t threadID;
-        uint16_t depth;                 // nesting depth
-    };
-
-    struct ActiveZone {
-
-        uintptr_t callsiteInfo; // ptr
-        int64_t  startTime;
-        int64_t  childInclusiveTime = 0; // total time of direct children
-        uint16_t depth = 0;
-    };
-
-    // TODO: think about a better allocation strategy depending on data flow for future iterations (slab, arena)
-    struct ThreadState {
-
-        std::vector<ActiveZone> activeZoneStack{  };    // currently open zones
-        std::vector<ZoneRecord> completedZones{  };     // finalized samples for this thread
-        uint16_t currentDepth = 0;
-
-        ThreadState() { activeZoneStack.reserve(128); completedZones.reserve(8192); }
-    };
-
-    // For future iterations look into flat maps for better cache locality
-    struct DataBlock {
-  
-        std::unordered_map<uint32_t, ThreadState> perThreadData; // <tid, ThreadState>
-    };
-
-    static std::unique_ptr<DataBlock> s_Data = nullptr;  
-
     Profiler::Profiler() 
         : m_MainThreadID(GetCurrentThreadID()), m_Epoch(GetTime())      
     { 
 
         IP_ASSERT(!s_Data, "");
-        s_Data = std::make_unique<DataBlock>();
 
         StartWorkerThread();
     }
@@ -101,40 +61,34 @@ namespace instprof {
 
     void Profiler::ProcessEvents() {
 
-    #if IP_EXPORT_TRACE
-
-        IP_INFO("Begin Trace");
-
-        std::ofstream File("iptrace.json", std::ios::binary | std::ios::trunc);
-        bool first = true;
-    #endif
-
-        auto& Data = s_Data;
-        EventItem ev;
         std::vector<ThreadEntry*> snapshot;
+        EventItem ev;
+        const int BATCH_SIZE = 512;
 
-        //  Implement a batch size to take advantage of cache locality
 
         for (;;) {
 
             bool workFound = false;
 
             {
-                std::lock_guard<std::mutex> lock(m_RegistrationMutex);
+                std::lock_guard<std::mutex> lock(m_RegistrationMutex); // TODO: Avoid this lock with a atomic thread counter. Only take a new snapshot if the count changes
                 snapshot = m_ThreadEntries;
             }
 
-            for (auto* t : snapshot) {
+            for (auto* entry : snapshot) {
 
-                while (t->EventQueue.TryPop(ev)) {
+                int batchCounter = 0;
 
+                while (entry->EventQueue.TryPop(ev)) {
+                    
                     workFound = true;
+                    batchCounter++;
     
                     switch (ev.tag.type) {
     
                         case EventType::ZoneBegin:
                         {
-                            auto& tState = Data->perThreadData[ev.zoneBegin.threadID];
+                            auto& tState = entry->State;
                             auto& activeZones = tState.activeZoneStack;
     
                             auto& az = activeZones.emplace_back();
@@ -148,7 +102,7 @@ namespace instprof {
     
                         case EventType::ZoneEnd:
                         {
-                            auto& tState = Data->perThreadData[ev.zoneEnd.threadID];
+                            auto& tState = entry->State;
                             auto& activeZones = tState.activeZoneStack;
 
                             if (activeZones.empty()) break; // guard against mismatched begin/end
@@ -156,11 +110,12 @@ namespace instprof {
                             auto az = activeZones.back();
                             activeZones.pop_back();
     
-                            auto& rec = tState.completedZones.emplace_back();
+                            // auto& rec = tState.completedZones.emplace_back();
+                            ZoneRecord rec;
                             rec.startTime     = az.startTime;
                             rec.endTime       = ev.zoneEnd.time;
                             rec.callsiteInfo  = az.callsiteInfo;
-                            rec.threadID      = ev.zoneEnd.threadID;
+                            rec.threadID      = entry->ThreadID; 
                             rec.depth         = activeZones.size();
                             rec.inclusiveTime = rec.endTime - rec.startTime;
                             rec.selfTime      = rec.inclusiveTime - az.childInclusiveTime;
@@ -180,30 +135,14 @@ namespace instprof {
                                 cs->stats.callCount++;
                             }
     
-                            // Temporary Trace-Event-Format Export for project
-                            #if IP_EXPORT_TRACE                                             
-                            if (first) { File << "[\n"; first = false; }
-                            else       { File << ",\n"; }
-    
-                            if (File.is_open()) {
-                                const auto* cs = reinterpret_cast<const CallsiteInfo*>(rec.callsiteInfo);
-    
-                                File << "  {"
-                                    << "\"name\": \"" << (cs ? cs->name : "unknown") << "\","
-                                    << "\"cat\": \"function\","
-                                    << "\"ph\": \"X\","
-                                    << "\"ts\": " << rec.startTime / 1000 << ","
-                                    << "\"dur\": " << rec.inclusiveTime / 1000 << ","
-                                    << "\"pid\": 0,"
-                                    << "\"tid\": " << rec.threadID << ",";
-    
-                                File << "\"args\": { \"self\": " << rec.selfTime / 1000 << " }"
-                                    << "}";
-                            }
-                            #endif
-    
                             break;
                         } 
+                    }
+
+                    if (batchCounter >= BATCH_SIZE) {
+
+                        batchCounter = 0;
+                        break;
                     }
                 } 
             }
@@ -211,15 +150,11 @@ namespace instprof {
             if (!workFound) {
 
                 if (m_Stop.load()) break;
-                std::this_thread::sleep_for(std::chrono::microseconds(100));
+                std::this_thread::sleep_for(std::chrono::microseconds(10));
+                // std::this_thread::yield();
             }
         }
-
-    #if IP_EXPORT_TRACE
-        File << "\n]\n";
-        File.flush();
-    #endif
-    }
+   }
 
     static int FormatTime(int64_t ns, char* buf, size_t len) {
 
@@ -293,6 +228,51 @@ namespace instprof {
         fprintf(stderr, "\n  Trace exported to iptrace.json — view at https://ui.perfetto.dev\n");
     #endif
         fprintf(stderr, "%s\n", line);
+    }
+
+    
+    void Profiler::ExportTrace() {
+        
+        // TODO
+        //
+        //
+        // #if IP_EXPORT_TRACE
+        //
+        //     IP_INFO("Begin Trace");
+        //
+        //     std::ofstream File("iptrace.json", std::ios::binary | std::ios::trunc);
+        //     bool first = true;
+        // #endif
+        //
+        // #if IP_EXPORT_TRACE                                             
+        //
+        // if (first) { File << "[\n"; first = false; }
+        // else       { File << ",\n"; }
+        //
+        // if (File.is_open()) {
+        //     const auto* cs = reinterpret_cast<const CallsiteInfo*>(rec.callsiteInfo);
+        //
+        //     File << "  {"
+        //         << "\"name\": \"" << (cs ? cs->name : "unknown") << "\","
+        //         << "\"cat\": \"function\","
+        //         << "\"ph\": \"X\","
+        //         << "\"ts\": " << rec.startTime / 1000 << ","
+        //         << "\"dur\": " << rec.inclusiveTime / 1000 << ","
+        //         << "\"pid\": 0,"
+        //         << "\"tid\": " << rec.threadID << ",";
+        //
+        //     File << "\"args\": { \"self\": " << rec.selfTime / 1000 << " }"
+        //         << "}";
+        // }
+        // #endif
+        //
+        //
+        // #if IP_EXPORT_TRACE
+        //     File << "\n]\n";
+        //     File.flush();
+        // #endif
+        //
+
     }
 
 }

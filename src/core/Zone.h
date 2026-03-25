@@ -16,7 +16,7 @@ namespace instprof {
             e.tag.type = EventType::ZoneBegin;
             e.zoneBegin.time         = GetTime();
             e.zoneBegin.callsiteInfo = reinterpret_cast<uintptr_t>(info);
-            e.zoneBegin.threadID     = GetCurrentThreadID();
+            // e.zoneBegin.threadID     = GetCurrentThreadID();
             Profiler::Get().EnqueueEvent(e);
         }
 
@@ -25,7 +25,7 @@ namespace instprof {
             EventItem e;
             e.tag.type = EventType::ZoneEnd;
             e.zoneEnd.time     = GetTime();
-            e.zoneEnd.threadID = GetCurrentThreadID();
+            // e.zoneEnd.threadID = GetCurrentThreadID();
             Profiler::Get().EnqueueEvent(e);
         }
 

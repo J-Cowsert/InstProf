@@ -14,16 +14,15 @@ namespace instprof {
 
         int64_t time;
         uintptr_t callsiteInfo; // pointer to static callsite metadata
-        uint32_t threadID;
+        // uint32_t threadID;
     };
 
     struct ZoneEnd {
 
         int64_t time;
-        uint32_t threadID;
+        // uint32_t threadID;
     };
     
-
     struct EventTag {
 
         union {
