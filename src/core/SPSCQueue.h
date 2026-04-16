@@ -39,6 +39,7 @@ namespace instprof {
         }
 
     private:
+        static_assert(std::is_trivially_constructible_v<T>, "SPSCQueue type must be trivially constructable");
         static_assert(Capacity > 0, "Capacity must be greater than zero");
         static_assert((Capacity & (Capacity - 1)) == 0, "Capacity must be a power of two");
 
