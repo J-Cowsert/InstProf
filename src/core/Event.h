@@ -31,6 +31,8 @@ namespace instprof {
         };
     };
 
+    // Causes misaligned access but improves throughput (tested on x86-64) 
+    #pragma pack(push, 1)
     struct EventItem {
 
         EventTag tag;
@@ -39,5 +41,6 @@ namespace instprof {
             ZoneEnd zoneEnd;
         };
     };
+    #pragma pack(pop)
 
 }
