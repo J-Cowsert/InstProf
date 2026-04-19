@@ -12,16 +12,11 @@
 #include <atomic>
 #include <mutex>
 
-/*
-    Look into std::stacktrace
-*/
-
 namespace instprof {
-
 
     struct ZoneRecord {
 
-        uintptr_t callsiteInfo;          // TODO: think about some sort of id hash if im to serialize in the future
+        uintptr_t callsiteInfo;
         int64_t  startTime;
         int64_t  endTime;
         int64_t  inclusiveTime;         // total duration (end-start)
@@ -32,17 +27,16 @@ namespace instprof {
 
     struct ActiveZone {
 
-        uintptr_t callsiteInfo; // ptr
+        uintptr_t callsiteInfo; 
         int64_t  startTime;
         int64_t  childInclusiveTime = 0; // total time of direct children
         uint16_t depth = 0;
     };
 
-    // TODO: think about a better allocation strategy depending on data flow for future iterations (slab, arena)
     struct ThreadState {
 
-        std::vector<ZoneRecord> completedZones{  };     // finalized samples for this thread
-        std::vector<ActiveZone> activeZoneStack{  };    // currently open zones
+        std::vector<ZoneRecord> completedZones;  // finalized samples 
+        std::vector<ActiveZone> activeZoneStack; // currently open zones
         uint16_t currentDepth = 0;
     };
 
@@ -89,6 +83,8 @@ namespace instprof {
             {
                 std::scoped_lock lock(m_RegistrationMutex); 
                 m_ThreadEntries.push_back(entry);
+
+                m_RegisteredThreadCount.fetch_add(1, std::memory_order_relaxed); // Relaxed is fine here because of the lock 
             }
             
             return entry;
@@ -111,8 +107,10 @@ namespace instprof {
         int64_t m_Epoch;
         uint32_t m_MainThreadID;
 
+        std::atomic<int32_t> m_RegisteredThreadCount{0};
+
         // Debug
-        std::atomic<uint64_t> m_PushFailCount{0};
+        std::atomic<int64_t> m_PushFailCount{0};
     };
 
     // Linker-generated section boundaries — array of CallsiteInfo pointers

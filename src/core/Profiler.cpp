@@ -19,16 +19,22 @@
 
 
 #ifndef IP_EXPORT_TRACE 
-    #define IP_EXPORT_TRACE 0
+    #define IP_EXPORT_TRACE 0 // Currently broken
 #endif
 
+/* 
+
+   TODO Research & tests 
+
+   - pin consumer thread to pcore
+   - slab or arena allocator for Active/completedZones
+*/
 
 namespace instprof {
 
     Profiler::Profiler() 
         : m_MainThreadID(GetCurrentThreadID()), m_Epoch(GetTime())      
     { 
-
         IP_ASSERT(!s_Data, "");
 
         StartWorkerThread();
@@ -40,6 +46,7 @@ namespace instprof {
         PrintStatsReport();
 
         std::cerr << m_PushFailCount << std::endl;
+        std::cerr << m_RegisteredThreadCount << std::endl;
     }
     
     bool Profiler::StartWorkerThread() {
@@ -62,28 +69,31 @@ namespace instprof {
     void Profiler::ProcessEvents() {
 
         std::vector<ThreadEntry*> snapshot;
-        EventItem ev;
-        const int BATCH_SIZE = 512;
-
+        const int BATCH_MAX = 256;
 
         for (;;) {
 
             bool workFound = false;
 
+            // Works because threads are currently never deregistered. If that changes, this breaks.
+            if (snapshot.size() < m_RegisteredThreadCount.load(std::memory_order_relaxed)) 
             {
-                std::lock_guard<std::mutex> lock(m_RegistrationMutex); // TODO: Avoid this lock with a atomic thread counter. Only take a new snapshot if the count changes
+                std::scoped_lock lock(m_RegistrationMutex); 
                 snapshot = m_ThreadEntries;
             }
 
             for (auto* entry : snapshot) {
 
-                int batchCounter = 0;
+                EventItem batch[BATCH_MAX];
+                int batchSize = entry->EventQueue.TryPopBatch(batch, BATCH_MAX);
 
-                while (entry->EventQueue.TryPop(ev)) {
+                for (size_t i = 0; i < batchSize; i++) {
                     
                     workFound = true;
-                    batchCounter++;
-    
+
+                    EventItem ev = batch[i];
+   
+                    // TODO: test whether if-else instead of switch improves L2 bad speculation 
                     switch (ev.tag.type) {
     
                         case EventType::ZoneBegin:
@@ -138,12 +148,6 @@ namespace instprof {
                             break;
                         } 
                     }
-
-                    if (batchCounter >= BATCH_SIZE) {
-
-                        batchCounter = 0;
-                        break;
-                    }
                 } 
             }
 
@@ -154,7 +158,7 @@ namespace instprof {
                 // std::this_thread::yield();
             }
         }
-   }
+    }
 
     static int FormatTime(int64_t ns, char* buf, size_t len) {
 
