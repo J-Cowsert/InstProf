@@ -45,8 +45,8 @@ namespace instprof {
         EndWorkerThread();
         PrintStatsReport();
 
-        std::cerr << m_PushFailCount << std::endl;
-        std::cerr << m_RegisteredThreadCount << std::endl;
+        // std::cerr << m_PushFailCount << std::endl;
+        // std::cerr << m_RegisteredThreadCount << std::endl;
     }
     
     bool Profiler::StartWorkerThread() {
@@ -94,6 +94,54 @@ namespace instprof {
                     EventItem ev = batch[i];
    
                     // TODO: test whether if-else instead of switch improves L2 bad speculation 
+#if 0
+                    if (ev.tag.type == EventType::ZoneBegin) {
+                        auto& tState = entry->State;
+                        auto& activeZones = tState.activeZoneStack;
+
+                        auto& az = activeZones.emplace_back();
+                        az.startTime          = ev.zoneBegin.time;
+                        az.callsiteInfo       = ev.zoneBegin.callsiteInfo;
+                        az.childInclusiveTime = 0;
+                        az.depth              = (uint32_t)activeZones.size() - 1; // 0-based depth
+                    }
+                    else {
+
+                        auto& tState = entry->State;
+                        auto& activeZones = tState.activeZoneStack;
+
+                        if (activeZones.empty()) break; // guard against mismatched begin/end
+
+                        auto az = activeZones.back();
+                        activeZones.pop_back();
+
+                        // auto& rec = tState.completedZones.emplace_back();
+                        ZoneRecord rec;
+                        rec.startTime     = az.startTime;
+                        rec.endTime       = ev.zoneEnd.time;
+                        rec.callsiteInfo  = az.callsiteInfo;
+                        rec.threadID      = entry->ThreadID; 
+                        rec.depth         = activeZones.size();
+                        rec.inclusiveTime = rec.endTime - rec.startTime;
+                        rec.selfTime      = rec.inclusiveTime - az.childInclusiveTime;
+                        
+                        if (!activeZones.empty()) {
+
+                            activeZones.back().childInclusiveTime += rec.inclusiveTime;
+                        }
+
+                        // Aggregate Stats — written directly into the callsite
+                        {
+                            auto* cs = reinterpret_cast<CallsiteInfo*>(rec.callsiteInfo);
+                            cs->stats.totalInclusiveTime += rec.inclusiveTime;
+                            cs->stats.totalSelfTime      += rec.selfTime;
+                            cs->stats.maxInclusiveTime   = std::max(cs->stats.maxInclusiveTime, rec.inclusiveTime);
+                            cs->stats.maxSelfTime        = std::max(cs->stats.maxSelfTime, rec.selfTime);
+                            cs->stats.callCount++;
+                        }
+                    }
+#endif
+                    
                     switch (ev.tag.type) {
     
                         case EventType::ZoneBegin:
@@ -150,7 +198,6 @@ namespace instprof {
                     }
                 } 
             }
-
             if (!workFound) {
 
                 if (m_Stop.load()) break;
