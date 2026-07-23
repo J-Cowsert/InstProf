@@ -42,7 +42,7 @@ namespace instprof {
 
     struct ThreadEntry {
 
-        SPSCQueue<EventItem, 4096> EventQueue;
+        SPSCQueue<EventItem, 2048> EventQueue;
         ThreadState State; 
         uint32_t ThreadID;
     };
@@ -83,7 +83,6 @@ namespace instprof {
             {
                 std::scoped_lock lock(m_RegistrationMutex); 
                 m_ThreadEntries.push_back(entry);
-
                 m_RegisteredThreadCount.fetch_add(1, std::memory_order_relaxed); // Relaxed is fine here because of the lock 
             }
             
@@ -102,15 +101,16 @@ namespace instprof {
         std::vector<ThreadEntry*> m_ThreadEntries;
 
         std::thread m_Worker;
-        std::atomic<bool> m_Running{false}, m_Stop{false}; // m_running doesnt need to be atomic
 
         int64_t m_Epoch;
         uint32_t m_MainThreadID;
 
         std::atomic<int32_t> m_RegisteredThreadCount{0};
+        std::atomic<bool> m_Running{false}, m_Stop{false}; // m_running doesnt need to be atomic
 
         // Debug
         std::atomic<int64_t> m_PushFailCount{0};
+
     };
 
     // Linker-generated section boundaries — array of CallsiteInfo pointers
