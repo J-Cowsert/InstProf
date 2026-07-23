@@ -14,7 +14,7 @@ namespace instprof {
 
     IP_FORCE_INLINE int64_t GetTime() {
 
-        #if 0 && defined(__x86_64__)
+        #if 1 && defined(__x86_64__)
             // TODO at later date: 
             //   ensure invariant TCS
             //   calibrate clock frequency
