@@ -10,7 +10,7 @@
 #include <thread>
 #include <vector>
 #include <atomic>
-#include <mutex>
+#include <thread>
 
 namespace instprof {
 
