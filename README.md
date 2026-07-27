@@ -24,8 +24,8 @@ Primary Use Cases:
 |------------------------------|-----------------------------------------------------------------------------|
 | RAII Instrumentation         | Automatic zone entry/exit tracking                    |
 | Zero Runtime Overhead When Disabled | IP_ENABLE=0 compiles to no-ops; profiling code is eliminated                |
-| Thread-Safe                  | Thread safe queue supports concurrent instrumentation from multiple threads   |
-| Low Overhead                 | Heavy processing happens asynchronously |
+| Lock-Free Hot Path           | Each thread owns a single-producer/single-consumer queue. Producers never take a lock and never contend with one another |
+| Asynchronous Processing      | A dedicated consumer thread pairs events, computes timings, and aggregates statistics off the instrumented thread |
 | Nested Zone Support          | Tracks call depth and calculates inclusive vs. self time                   |
 | Per-Callsite Aggregation     | Accumulates statistics for each instrumentation point |
 | Chrome Trace Export          | Generates iptrace.json for external visualization tools supporting Trace Event Format              |
@@ -92,11 +92,25 @@ cmake --build .   # compile
 
 #### Build Options Reference
 
-| CMake Option                  | Type    | Default | Description                          |
-|-------------------------------|---------|---------|--------------------------------------|
-| IP_ENABLE                     | Boolean | ON      | Enable profiler instrumentation      |
-| CMAKE_BUILD_TYPE              | String  | None    | Build configuration (Debug/Release)  |
-| CMAKE_EXPORT_COMPILE_COMMANDS | Boolean | ON      | Generate compile_commands.json       |
+| CMake Option                  | Type    | Default        | Description                                     |
+|-------------------------------|---------|----------------|-------------------------------------------------|
+| IP_ENABLE                     | Boolean | ON             | Enable profiler instrumentation                 |
+| IP_BUILD_BENCHMARKS           | Boolean | OFF            | Build benchmarks (fetches Google Benchmark)     |
+| CMAKE_BUILD_TYPE              | String  | RelWithDebInfo | Build configuration                             |
+| CMAKE_EXPORT_COMPILE_COMMANDS | Boolean | ON             | Generate compile_commands.json                  |
+
+Configure presets are also provided:
+
+```bash
+cmake --preset release      # or: debug, bench
+cmake --build --preset release
+```
+
+One additional knob is a compile definition rather than a CMake option:
+
+| Definition       | Default | Description                                                      |
+|------------------|---------|------------------------------------------------------------------|
+| IP_EXPORT_TRACE  | 1       | Write `iptrace.json` at shutdown. Set to 0 for statistics only    |
 
 The IP_ENABLE option defined in CMakeLists.txt controls whether profiling code is compiled into the library. When disabled, instrumentation macros expand to nothing
 
@@ -162,10 +176,21 @@ void my_function() {
 
 ### Architectural Overview
 
-InstProf follows a producer-consumer architecture where application threads produce profiling events through RAII instrumentation, and a dedicated worker thread consumes and processes these events asynchronously.
+InstProf follows a producer-consumer architecture. Application threads produce profiling events through RAII instrumentation, and a dedicated worker thread consumes and processes them asynchronously.
 
-![InstProf Overview](assets/InstProf_overview.png)
+**Producers.** Entering a zone emits a `ZoneBegin` event; leaving it emits a `ZoneEnd`. Each thread pushes into its own single-producer/single-consumer ring buffer, reached through a cached `thread_local` pointer, so producers never take a lock and never contend with each other. Threads register themselves on first use.
 
-### Runtime Behavior
+**Callsites.** Each instrumentation macro creates a static `CallsiteInfo` (name, function, file, line) whose address is registered into a dedicated linker section at link time. Events carry the callsite pointer rather than a string, so no string handling happens on the hot path.
 
-![InstProf Runtime](assets/InstProf_runtime.png)
+**Consumer.** A single worker thread drains every queue in batches, maintains a per-thread stack of open zones to pair begins with ends, and computes inclusive and self time. Results are aggregated per callsite and retained as zone records for the trace export.
+
+**Shutdown.** The worker is stopped and joined, the trace is written, and the statistics report is printed to stderr.
+
+---
+
+### Current Limitations
+
+- **Consumer throughput is the scaling limit.** One consumer thread services all producers, so per-zone overhead grows as producer thread count rises. When a queue fills, the producing thread spins until space is available.
+- **Threads are never deregistered.** Thread entries are retained for the life of the process. This keeps the consumer's queue snapshot safe without synchronization, but means memory grows with the number of threads a process has ever created.
+- **Zone records are held in memory until shutdown**, so peak memory scales with total zone count.
+- **The Chrome Trace Event format is a legacy format.** It remains widely supported, but Perfetto now recommends its native protobuf format for new instrumentation libraries.
