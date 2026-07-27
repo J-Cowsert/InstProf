@@ -10,6 +10,11 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_subdirectory(../ ip)
 
 add_executable(test main.cpp)
-target_link_libraries(test PRIVATE InstProf)
 
+target_link_libraries(test PRIVATE InstProf)
 target_include_directories(test PUBLIC ../src/)
+
+
+add_executable(workload workload.cpp)
+target_link_libraries(workload PRIVATE InstProf)
+target_include_directories(workload PUBLIC ../src/)

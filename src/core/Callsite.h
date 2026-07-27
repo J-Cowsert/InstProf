@@ -5,7 +5,9 @@
 #include <cstdint>
 #include <source_location>
 
-#define IP__REGISTER_CALLSITE(cs) static __attribute__((section("instprof_cs"), used)) instprof::CallsiteInfo* IP_CONCAT(_ipCsPtr_, __LINE__) = &(cs)
+#define IP_REGISTER_CALLSITE(cs) static __attribute__((section("instprof_cs"), used)) instprof::CallsiteInfo* IP_CONCAT(_ipCsPtr_, __LINE__) = &(cs)
+
+// #define IP_DEFINE_CALLSITE  ---  combine IP_REGISTER_CALLSITE and MakeCallsite to clean up api
 
 namespace instprof {
 
@@ -27,14 +29,14 @@ namespace instprof {
         AggregateStats stats{};
     };
 
-    IP_FORCE_INLINE constexpr CallsiteInfo MakeCallsite(const char* name, std::source_location loc = std::source_location::current()) noexcept {
-
-        return {
-            name,
-            loc.function_name(),
-            loc.file_name(),
-            static_cast<uint32_t>(loc.line()),
-            {}
+    IP_FORCE_INLINE constexpr CallsiteInfo MakeCallsite(const char* name, std::source_location source = std::source_location::current()) noexcept {
+        
+        return CallsiteInfo{
+            .name = name,
+            .function = source.function_name(),
+            .file = source.file_name(),
+            .line = static_cast<uint32_t>(source.line()),
+            .stats = {}
         };
     }
 
