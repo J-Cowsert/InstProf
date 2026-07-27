@@ -7,6 +7,12 @@
 
 namespace instprof {
 
+    // Notes: Consider single event design tradoffs. Sending two events makes live-view easy.
+    //
+    // Currently when a ZoneBegin event is sent to a queue that is full, EnqueueEvent spins until a slot is available. 
+    // This distorts the measurements. A single event design would solve this issue, and simplify consumer code at the
+    // sacrifice of live-view in the future.
+        
     class ZoneScope {
     public:
         

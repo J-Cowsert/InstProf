@@ -1,11 +1,9 @@
 #include "Profiler.h"
 
-#include "core/Assert.h"
 #include "core/Callsite.h"
 #include "core/Event.h"
 #include "core/Log.h"
 #include "core/System.h"
-#include "core/Callsite.h"
 
 #include <algorithm>
 #include <chrono>
@@ -19,7 +17,7 @@
 
 
 #ifndef IP_EXPORT_TRACE 
-    #define IP_EXPORT_TRACE 0 // Currently broken
+    #define IP_EXPORT_TRACE 1
 #endif
 
 /* 
@@ -35,17 +33,16 @@ namespace instprof {
     Profiler::Profiler() 
         : m_MainThreadID(GetCurrentThreadID()), m_Epoch(GetTime())      
     { 
-        IP_ASSERT(!s_Data, "");
-
         StartWorkerThread();
     }
 
     Profiler::~Profiler() {
 
         EndWorkerThread();
+        ExportTrace();
         PrintStatsReport();
 
-        // std::cerr << m_PushFailCount << std::endl;
+        // std::cerr << "PushFailCount:" << m_PushFailCount << std::endl;
         // std::cerr << m_RegisteredThreadCount << std::endl;
     }
     
@@ -93,55 +90,6 @@ namespace instprof {
 
                     EventItem ev = batch[i];
    
-                    // TODO: test whether if-else instead of switch improves L2 bad speculation 
-#if 0
-                    if (ev.tag.type == EventType::ZoneBegin) {
-                        auto& tState = entry->State;
-                        auto& activeZones = tState.activeZoneStack;
-
-                        auto& az = activeZones.emplace_back();
-                        az.startTime          = ev.zoneBegin.time;
-                        az.callsiteInfo       = ev.zoneBegin.callsiteInfo;
-                        az.childInclusiveTime = 0;
-                        az.depth              = (uint32_t)activeZones.size() - 1; // 0-based depth
-                    }
-                    else {
-
-                        auto& tState = entry->State;
-                        auto& activeZones = tState.activeZoneStack;
-
-                        if (activeZones.empty()) break; // guard against mismatched begin/end
-
-                        auto az = activeZones.back();
-                        activeZones.pop_back();
-
-                        // auto& rec = tState.completedZones.emplace_back();
-                        ZoneRecord rec;
-                        rec.startTime     = az.startTime;
-                        rec.endTime       = ev.zoneEnd.time;
-                        rec.callsiteInfo  = az.callsiteInfo;
-                        rec.threadID      = entry->ThreadID; 
-                        rec.depth         = activeZones.size();
-                        rec.inclusiveTime = rec.endTime - rec.startTime;
-                        rec.selfTime      = rec.inclusiveTime - az.childInclusiveTime;
-                        
-                        if (!activeZones.empty()) {
-
-                            activeZones.back().childInclusiveTime += rec.inclusiveTime;
-                        }
-
-                        // Aggregate Stats — written directly into the callsite
-                        {
-                            auto* cs = reinterpret_cast<CallsiteInfo*>(rec.callsiteInfo);
-                            cs->stats.totalInclusiveTime += rec.inclusiveTime;
-                            cs->stats.totalSelfTime      += rec.selfTime;
-                            cs->stats.maxInclusiveTime   = std::max(cs->stats.maxInclusiveTime, rec.inclusiveTime);
-                            cs->stats.maxSelfTime        = std::max(cs->stats.maxSelfTime, rec.selfTime);
-                            cs->stats.callCount++;
-                        }
-                    }
-#endif
-                    
                     switch (ev.tag.type) {
     
                         case EventType::ZoneBegin:
@@ -168,8 +116,8 @@ namespace instprof {
                             auto az = activeZones.back();
                             activeZones.pop_back();
     
-                            // auto& rec = tState.completedZones.emplace_back();
-                            ZoneRecord rec;
+                            auto& rec = tState.completedZones.emplace_back(); // storing is a bad idea - so many pagefaults!
+                            //ZoneRecord rec;
                             rec.startTime     = az.startTime;
                             rec.endTime       = ev.zoneEnd.time;
                             rec.callsiteInfo  = az.callsiteInfo;
@@ -283,47 +231,55 @@ namespace instprof {
 
     
     void Profiler::ExportTrace() {
-        
-        // TODO
-        //
-        //
-        // #if IP_EXPORT_TRACE
-        //
-        //     IP_INFO("Begin Trace");
-        //
-        //     std::ofstream File("iptrace.json", std::ios::binary | std::ios::trunc);
-        //     bool first = true;
-        // #endif
-        //
-        // #if IP_EXPORT_TRACE                                             
-        //
-        // if (first) { File << "[\n"; first = false; }
-        // else       { File << ",\n"; }
-        //
-        // if (File.is_open()) {
-        //     const auto* cs = reinterpret_cast<const CallsiteInfo*>(rec.callsiteInfo);
-        //
-        //     File << "  {"
-        //         << "\"name\": \"" << (cs ? cs->name : "unknown") << "\","
-        //         << "\"cat\": \"function\","
-        //         << "\"ph\": \"X\","
-        //         << "\"ts\": " << rec.startTime / 1000 << ","
-        //         << "\"dur\": " << rec.inclusiveTime / 1000 << ","
-        //         << "\"pid\": 0,"
-        //         << "\"tid\": " << rec.threadID << ",";
-        //
-        //     File << "\"args\": { \"self\": " << rec.selfTime / 1000 << " }"
-        //         << "}";
-        // }
-        // #endif
-        //
-        //
-        // #if IP_EXPORT_TRACE
-        //     File << "\n]\n";
-        //     File.flush();
-        // #endif
-        //
 
+        // Naive
+        
+        // int64_t start = GetTime();
+        
+        #if IP_EXPORT_TRACE
+
+        IP_INFO("Begin Trace");
+
+        std::ofstream File("iptrace.json", std::ios::binary | std::ios::trunc);
+        bool first = true;
+
+
+        if (File.is_open()) {
+
+            File << "[\n";
+
+            for (ThreadEntry* entry : m_ThreadEntries) {
+
+                for (const ZoneRecord& rec : entry->State.completedZones) {
+
+                    const auto* cs = reinterpret_cast<const CallsiteInfo*>(rec.callsiteInfo);
+
+                    if (!first) File << ",\n";
+                    first = false;
+
+                    File << "  {"
+                        << "\"name\": \"" << (cs ? cs->name : "unknown") << "\","
+                        << "\"cat\": \"function\","
+                        << "\"ph\": \"X\","
+                        << "\"ts\": " << rec.startTime / 1000 << ","
+                        << "\"dur\": " << rec.inclusiveTime / 1000 << ","
+                        << "\"pid\": 0,"
+                        << "\"tid\": " << rec.threadID << ",";
+
+                    File << "\"args\": { \"self\": " << rec.selfTime / 1000 << " }" << "}";
+
+                }
+            }
+
+        }
+
+        File << "\n]\n";
+        File.flush();
+
+        #endif
+
+        // int64_t end = GetTime();
+        // std::cerr << "Trace export time: " << (end - start) / 1e6f << "\n";
     }
 
 }
