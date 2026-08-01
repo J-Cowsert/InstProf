@@ -1,18 +1,30 @@
 
 cmake_minimum_required(VERSION 3.25)
-project(instprof LANGUAGES CXX VERSION 1.0)
+project(instprof LANGUAGES CXX)
 
-if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
-    message(STATUS "No build type specified, defaulting to RelWithDebInfo")
-    set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type" FORCE)
+
+if (PROJECT_IS_TOP_LEVEL)
+
+    set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+    if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+        message(STATUS "No build type specified, defaulting to RelWithDebInfo")
+        set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type" FORCE)
+    endif()
+
+    set(IP_SANITIZE "" CACHE STRING "Sanitizers: 'address,undefined' or 'thread' (dev builds only)")
+    if(IP_SANITIZE)
+        add_compile_options(-fsanitize=${IP_SANITIZE} -fno-omit-frame-pointer)
+        add_link_options(-fsanitize=${IP_SANITIZE})
+    endif()
+
 endif()
 
-set(CMAKE_CXX_STANDARD 23)
-set(CMAKE_CXX_STANDARD_REQUIRED true)
 
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
+# options
 option(IP_ENABLE "Enable profiler instrumentation" ON)
+option(IP_EXPORT_TRACE "Write iptrace.json at shutdown" ON)
+option(IP_BUILD_BENCHMARKS "Build benchmarks (Requires https://github.com/google/benchmark.git)" OFF)
 
 file(GLOB_RECURSE SRC_FILES
      CONFIGURE_DEPENDS
@@ -21,25 +33,21 @@ file(GLOB_RECURSE SRC_FILES
 
 add_library(InstProf STATIC ${SRC_FILES})
 
-target_include_directories(InstProf PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src/)
-
-if(IP_ENABLE)
-    target_compile_definitions(InstProf PUBLIC IP_ENABLE=1)
-else()
-    target_compile_definitions(InstProf PUBLIC IP_ENABLE=0)
+if (PROJECT_IS_TOP_LEVEL) 
+    target_compile_options(InstProf PRIVATE -Wall -Wextra)
 endif()
 
-if(UNIX AND NOT APPLE)
-    target_compile_definitions(InstProf PUBLIC IP_PLATFORM_LINUX)
-endif()
+target_compile_features(InstProf PUBLIC cxx_std_20)
+target_include_directories(InstProf PUBLIC $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>)
 
-if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    target_compile_definitions(InstProf PUBLIC IP_DEBUG)
-elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    target_compile_definitions(InstProf PUBLIC IP_RELEASE)
-endif()
+target_compile_definitions(InstProf
+    PUBLIC
+        IP_ENABLE=$<BOOL:${IP_ENABLE}>
+        $<$<CONFIG:Debug>:IP_DEBUG>
+        $<$<PLATFORM_ID:Linux>:IP_PLATFORM_LINUX>
+    PRIVATE
+        IP_EXPORT_TRACE=$<BOOL:${IP_EXPORT_TRACE}>)
 
-option(IP_BUILD_BENCHMARKS "Build benchmarks (fetches Google Benchmark)" OFF)
 
 if(IP_BUILD_BENCHMARKS)
     add_subdirectory(bench)
