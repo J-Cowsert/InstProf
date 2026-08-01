@@ -1,0 +1,10 @@
+Checks: >
+  bugprone-*,
+  performance-*,
+  concurrency-*,
+  clang-analyzer-*,
+  -bugprone-easily-swappable-parameters
+WarningsAsErrors: ''
+HeaderFilterRegex: 'src/.*'
+
+ExtraArgsBefore: ['-std=gnu++20'] 
