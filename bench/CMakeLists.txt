@@ -1,19 +1,27 @@
-include(FetchContent)
 
-set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
-set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+find_package(benchmark CONFIG)
 
-FetchContent_Declare(
-    googlebenchmark
-    GIT_REPOSITORY https://github.com/google/benchmark.git
-    GIT_TAG        v1.9.1
-)
-FetchContent_MakeAvailable(googlebenchmark)
+if (NOT benchmark_FOUND)
 
-file(GLOB BENCH_SOURCES CONFIGURE_DEPENDS bench_*.cpp)
+    message(STATUS "Using CMake Version ${CMAKE_VERSION}")
+    message(STATUS "Downloading GoogleBenchmark")
 
-foreach(src ${BENCH_SOURCES})
-    get_filename_component(name ${src} NAME_WE)
-    add_executable(${name} ${src})
-    target_link_libraries(${name} PRIVATE InstProf benchmark::benchmark)
-endforeach()
+    include(FetchContent)
+
+    set(BENCHMARK_ENABLE_TESTING OFF CACHE BOOL "" FORCE)
+    set(BENCHMARK_ENABLE_INSTALL OFF CACHE BOOL "" FORCE)
+
+    FetchContent_Declare(
+        googlebenchmark
+        GIT_REPOSITORY https://github.com/google/benchmark.git
+        GIT_TAG        v1.9.1
+    )
+    FetchContent_MakeAvailable(googlebenchmark)
+
+endif()
+
+add_executable(workload workload.cpp)
+target_link_libraries(workload PRIVATE InstProf)
+
+add_executable(bench_spscqueue bench_spscqueue.cpp)
+target_link_libraries(bench_spscqueue PRIVATE InstProf benchmark::benchmark)
