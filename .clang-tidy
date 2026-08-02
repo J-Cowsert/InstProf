@@ -7,4 +7,3 @@ Checks: >
 WarningsAsErrors: ''
 HeaderFilterRegex: 'src/.*'
 
-ExtraArgsBefore: ['-std=gnu++20'] 

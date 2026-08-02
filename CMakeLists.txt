@@ -20,6 +20,7 @@ if (PROJECT_IS_TOP_LEVEL)
 
 endif()
 
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 # options
 option(IP_ENABLE "Enable profiler instrumentation" ON)
