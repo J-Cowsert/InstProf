@@ -1,33 +1,42 @@
 {
   "version": 3,
   "configurePresets": [
-    {
-      "name": "debug",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/debug",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
-    },
-    {
-      "name": "release",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/release",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
-    },
-    {
-      "name": "bench",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/bench",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "IP_BUILD_BENCHMARKS": "ON"
-      }
-    }
-  ],
 
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}"
+    },
+    
+    { "name": "debug",   "inherits": "base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" } },
+
+    { "name": "release", "inherits": "base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" } },
+
+    { "name": "bench",   "inherits": "base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                          "IP_BUILD_BENCHMARKS": "ON" } },
+
+    { "name": "asan", "inherits": "base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug",
+                          "IP_BUILD_BENCHMARKS": "ON",
+                          "IP_SANITIZE": "address,undefined" } },
+
+    { "name": "tsan", "inherits": "base",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+                          "IP_BUILD_BENCHMARKS": "ON",
+                          "IP_SANITIZE": "thread" } }
+
+             
+  ],
   "buildPresets": [
     { "name": "debug",   "configurePreset": "debug" },
     { "name": "release", "configurePreset": "release" },
-    { "name": "bench",   "configurePreset": "bench" }
+    { "name": "bench",   "configurePreset": "bench" },
+    { "name": "asan",    "configurePreset": "asan"},
+    { "name": "tsan",    "configurePreset": "tsan"}
   ]
 }
 
