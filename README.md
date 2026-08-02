@@ -5,12 +5,12 @@
 > This repository is undergoing active development. Expect possible modifications to code structure, features, or dependencies.
 
 
-InstProf is a lightweight C++ profiling library that instruments code execution using RAII-based scope tracking. It records timing information for annotated code regions (called "zones") and aggregates statistics. 
+InstProf is a lightweight C++ profiling library that instruments code execution using RAII-based scope tracking. It records timing information for annotated code regions (called "zones"), aggregates per-callsite statistics, and exports traces for visualization.
 
 
 Primary Use Cases:
 
-- Performance profiling of multi-threaded applications
+- Performance profiling of single/multi-threaded applications
 - Identifying hot paths and bottlenecks
 - Understanding recursive call patterns
 - Analyzing time distribution across nested function calls
@@ -34,42 +34,61 @@ Primary Use Cases:
 
 ### Quick Example
 
-```cpp
-#include "instprof.h"
+This is `examples/demo.cpp`, built by default:
 
-void process_data(int n) {
-    IP_FUNC_SCOPE();  // Automatically named "process_data"
-    
-    for (int i = 0; i < n; ++i) {
-        IP_NAMED_SCOPE("iteration");  // Custom name
-        // ... work here ...
+```cpp
+#include <instprof.h>
+
+#include <thread>
+
+static void do_work(int items) {
+    IP_FUNC_SCOPE();
+    for (int i = 0; i < items; ++i) {
+        IP_NAMED_SCOPE("item");
+        volatile long x = 0;                     // stand-in for real work
+        for (int j = 0; j < 5000; ++j) x += j;
     }
 }
 
 int main() {
     IP_FUNC_SCOPE();
-    process_data(100);
-    // Profiling data automatically collected and exported on shutdown
+
+    std::thread t([] { do_work(50); });
+    do_work(100);
+    t.join();
 }
 ```
 
-This generates:
+Running it prints a statistics report at shutdown:
 
-- Per-thread timing data for each zone
-- Aggregate statistics per callsite (e.g., "iteration" called 100 times)
-- Nested timing relationships (main → process_data → iteration)
-- JSON trace file for external visualization
+```
+  ──────────────────────────────────────────────────────────────────────────────────────────────────
+  instprof — Session Statistics  (sorted by total self time)
+  ──────────────────────────────────────────────────────────────────────────────────────────────────
+  Name                        Calls   Self Tot   Self Avg   Self Max   Incl Tot   Incl Avg   Incl Max
+  ──────────────────────────────────────────────────────────────────────────────────────────────────
+  item                          150    469.0 us     3.1 us    14.8 us   469.0 us     3.1 us    14.8 us
+  main                            1    111.6 us   111.6 us   111.6 us   425.4 us   425.4 us   425.4 us
+  do_work                         2     68.4 us    34.2 us    63.2 us   537.5 us   268.7 us   313.8 us
+  ──────────────────────────────────────────────────────────────────────────────────────────────────
+  3 callsite(s), 153 total call(s)
+
+  Trace exported to iptrace.json — view at https://ui.perfetto.dev
+  ──────────────────────────────────────────────────────────────────────────────────────────────────
+```
+
+and writes `iptrace.json` (in the working directory) — drop it into https://ui.perfetto.dev to see the zones on a timeline, one track per thread.
 
 ---
 
 ### Prerequisites
 
-InstProf requires: 
+InstProf requires:
 
 | Requirement   | Minimum Version     |
 |---------------|---------------------|
 | CMake         | 3.25                |
-| C++ Compiler  | C++23 support       |
+| C++ Compiler  | C++20 support       |
 | Platform      | Linux (primary)     |
 
 Currently, InstProf supports Linux on x86_64 architecture. The build system enforces these requirements through compile-time checks in
@@ -80,99 +99,104 @@ src/core/Core.h
 ### Building
 
 ```bash
-git clone https://github.com/J-Cowser/InstProf
+git clone https://github.com/J-Cowsert/InstProf
 cd InstProf
 
-mkdir build
-cd build
-
-cmake ..       # configure the project
-cmake --build .   # compile
-```
-
-#### Build Options Reference
-
-| CMake Option                  | Type    | Default        | Description                                     |
-|-------------------------------|---------|----------------|-------------------------------------------------|
-| IP_ENABLE                     | Boolean | ON             | Enable profiler instrumentation                 |
-| IP_BUILD_BENCHMARKS           | Boolean | OFF            | Build benchmarks (fetches Google Benchmark)     |
-| CMAKE_BUILD_TYPE              | String  | RelWithDebInfo | Build configuration                             |
-| CMAKE_EXPORT_COMPILE_COMMANDS | Boolean | ON             | Generate compile_commands.json                  |
-
-Configure presets are also provided:
-
-```bash
-cmake --preset release      # or: debug, bench
+cmake --preset release
 cmake --build --preset release
+
+./build/release/examples/demo
 ```
 
-One additional knob is a compile definition rather than a CMake option:
+`cmake --list-presets` shows all available configurations. Plain `cmake -S . -B build && cmake --build build` also works and defaults to RelWithDebInfo.
 
-| Definition       | Default | Description                                                      |
-|------------------|---------|------------------------------------------------------------------|
-| IP_EXPORT_TRACE  | 1       | Write `iptrace.json` at shutdown. Set to 0 for statistics only    |
+#### Build Options
 
-The IP_ENABLE option defined in CMakeLists.txt controls whether profiling code is compiled into the library. When disabled, instrumentation macros expand to nothing
+| CMake Option        | Type    | Default        | Description                                                        |
+|---------------------|---------|----------------|--------------------------------------------------------------------|
+| IP_ENABLE           | Boolean | ON             | Enable profiler instrumentation. OFF compiles all macros to no-ops |
+| IP_EXPORT_TRACE     | Boolean | ON             | Write `iptrace.json` at shutdown. OFF for statistics only          |
+| IP_BUILD_BENCHMARKS | Boolean | OFF            | Build the perf workload and Google Benchmark microbenches (uses the system Google Benchmark if installed, fetches it otherwise) |
+| CMAKE_BUILD_TYPE    | String  | RelWithDebInfo | Build configuration                                                |
 
 ---
 
 ### Integrating Into Your Project
 
-##### CMake Integration
-
 Add InstProf as a subdirectory in your project's CMakeLists.txt:
-```cmake
-# Add InstProf library
-add_subdirectory(path/to/InstProf)
 
-# Link against your executable
+```cmake
+add_subdirectory(path/to/InstProf)
 target_link_libraries(YourExecutable PRIVATE InstProf)
 ```
+
+or fetch it directly:
+
+```cmake
+include(FetchContent)
+FetchContent_Declare(instprof
+    GIT_REPOSITORY https://github.com/J-Cowsert/InstProf
+    GIT_TAG        master)
+FetchContent_MakeAvailable(instprof)
+
+target_link_libraries(YourExecutable PRIVATE InstProf)
+```
+
+Linking the target is all that's required — include paths, the C++20 requirement, and configuration defines propagate automatically. When consumed this way, InstProf builds only the library: examples, benchmarks, and development tooling stay out of your build, and none of your project's global settings are touched.
+
 ---
 
 ### Instrumenting Your Code
 
-To use InstProf, include the single public header in your source files:
+Include the single public header in your source files:
 
 ```cpp
-#include "instprof.h"
+#include <instprof.h>
 ```
-In this header, InstProf provides two primary macros for instrumenting code:
 
-| Macro                     | Purpose                    | Scope Name                          |
+Two macros instrument code:
+
+| Macro                     | Purpose                    | Zone Name                           |
 |---------------------------|----------------------------|-------------------------------------|
 | IP_FUNC_SCOPE()           | Profile entire function    | Uses `__func__` (function name)     |
-| IP_NAMED_SCOPE("name")    | Profile code block         | Uses provided string literal
+| IP_NAMED_SCOPE("name")    | Profile a code block       | Uses the provided string literal    |
 
-### Usage Patterns
-
-#### Function-Level Profiling
-
-Add IP_FUNC_SCOPE() at the beginning of any function to profile it. The macro uses the compiler-provided __func__ to automatically name the profiling zone:
+Both create an RAII object: the zone opens where the macro appears and closes at the end of the enclosing scope. Zones nest freely — the profiler tracks depth and computes inclusive time (total) and self time (excluding children) for each callsite.
 
 ```cpp
 void my_function() {
-    IP_FUNC_SCOPE();
-    // Your function body here
-}
-```
-
-#### Named Scope Instrumentation
-
-Use IP_NAMED_SCOPE(name) to profile specific code blocks with custom names:
-
-```cpp
-void my_function() {
-    IP_FUNC_SCOPE();
+    IP_FUNC_SCOPE();                      // zone: "my_function"
 
     for (int i = 0; i < 1000; ++i) {
-        IP_NAMED_SCOPE("loop_iteration");
+        IP_NAMED_SCOPE("loop_iteration"); // zone: "loop_iteration", 1000 calls
         // Work here
     }
 }
 ```
 
---- 
+---
+
+### Development
+
+Repository layout:
+
+```
+src/        the InstProf library (the only thing consumers build)
+examples/   demo.cpp — minimal instrumented program, built by default
+bench/      perf workload + Google Benchmark microbenches (IP_BUILD_BENCHMARKS=ON)
+scripts/    bench.py (benchmark runner), overhead_compare.sh (IP_ENABLE on/off comparison)
+```
+
+Configure presets: `debug`, `release`, `bench` (benchmarks + workload, RelWithDebInfo), `asan` (AddressSanitizer + UBSan), `tsan` (ThreadSanitizer).
+
+```bash
+cmake --preset tsan && cmake --build --preset tsan
+./build/tsan/bench/workload        # race-check the queue under load
+```
+
+The library compiles as strict C++20 with `-Wall -Wextra` (no GNU extensions). A `.clang-tidy` configuration is provided and picked up automatically by clangd.
+
+---
 
 ### Architectural Overview
 
@@ -193,4 +217,4 @@ InstProf follows a producer-consumer architecture. Application threads produce p
 - **Consumer throughput is the scaling limit.** One consumer thread services all producers, so per-zone overhead grows as producer thread count rises. When a queue fills, the producing thread spins until space is available.
 - **Threads are never deregistered.** Thread entries are retained for the life of the process. This keeps the consumer's queue snapshot safe without synchronization, but means memory grows with the number of threads a process has ever created.
 - **Zone records are held in memory until shutdown**, so peak memory scales with total zone count.
-- **The Chrome Trace Event format is a legacy format.** It remains widely supported, but Perfetto now recommends its native protobuf format for new instrumentation libraries.
+- **The trace is written in Chrome Trace Event JSON.** The format remains widely supported, though it is associated with the legacy `chrome://tracing` tool; Perfetto suggests its native protobuf format is worth considering for new tooling.
