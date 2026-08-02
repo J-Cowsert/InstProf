@@ -1,9 +1,9 @@
 
 cmake_minimum_required(VERSION 3.25)
-project(instprof LANGUAGES CXX)
+project(instprof VERSION 0.1.0 LANGUAGES CXX)
 
 
-if (PROJECT_IS_TOP_LEVEL)
+if(PROJECT_IS_TOP_LEVEL)
 
     set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
@@ -34,7 +34,7 @@ file(GLOB_RECURSE SRC_FILES
 
 add_library(InstProf STATIC ${SRC_FILES})
 
-if (PROJECT_IS_TOP_LEVEL) 
+if(PROJECT_IS_TOP_LEVEL) 
     target_compile_options(InstProf PRIVATE -Wall -Wextra)
 endif()
 
@@ -50,8 +50,14 @@ target_compile_definitions(InstProf
         IP_EXPORT_TRACE=$<BOOL:${IP_EXPORT_TRACE}>)
 
 
+if(PROJECT_IS_TOP_LEVEL)
+    add_subdirectory(examples)
+endif()
+
 if(IP_BUILD_BENCHMARKS)
     add_subdirectory(bench)
 endif()
+
+
 
 
