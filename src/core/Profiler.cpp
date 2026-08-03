@@ -31,7 +31,7 @@
 namespace instprof {
 
     Profiler::Profiler() 
-        : m_MainThreadID(GetCurrentThreadID()), m_Epoch(GetTime())      
+        :  m_Epoch(GetTime()), m_MainThreadID(GetCurrentThreadID())
     { 
         StartWorkerThread();
     }
@@ -66,7 +66,7 @@ namespace instprof {
     void Profiler::ProcessEvents() {
 
         std::vector<ThreadEntry*> snapshot;
-        const int BATCH_MAX = 256;
+        const uint16_t BATCH_MAX = 256;
 
         for (;;) {
 
@@ -82,7 +82,7 @@ namespace instprof {
             for (auto* entry : snapshot) {
 
                 EventItem batch[BATCH_MAX];
-                int batchSize = entry->EventQueue.TryPopBatch(batch, BATCH_MAX);
+                size_t batchSize = entry->EventQueue.TryPopBatch(batch, BATCH_MAX);
 
                 for (size_t i = 0; i < batchSize; i++) {
                     
@@ -133,7 +133,7 @@ namespace instprof {
     
                             // Aggregate Stats — written directly into the callsite
                             {
-                                auto* cs = reinterpret_cast<CallsiteInfo*>(rec.callsiteInfo);
+                                auto* cs = rec.callsiteInfo;
                                 cs->stats.totalInclusiveTime += rec.inclusiveTime;
                                 cs->stats.totalSelfTime      += rec.selfTime;
                                 cs->stats.maxInclusiveTime   = std::max(cs->stats.maxInclusiveTime, rec.inclusiveTime);
@@ -207,7 +207,7 @@ namespace instprof {
             int64_t avgSelf = s.totalSelfTime      / (int64_t)s.callCount;
             int64_t avgIncl = s.totalInclusiveTime  / (int64_t)s.callCount;
 
-            char st[16], sa[16], sm[16], it[16], ia[16], im[16];
+            char st[24], sa[24], sm[24], it[24], ia[24], im[24];
             FormatTime(s.totalSelfTime,      st, sizeof(st));
             FormatTime(avgSelf,              sa, sizeof(sa));
             FormatTime(s.maxSelfTime,        sm, sizeof(sm));

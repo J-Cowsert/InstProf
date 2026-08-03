@@ -4,6 +4,8 @@
 
 namespace instprof {
 
+    struct CallsiteInfo;
+
     enum class EventType : uint8_t {
         
         ZoneBegin,
@@ -13,7 +15,7 @@ namespace instprof {
     struct ZoneBegin {
 
         int64_t time;
-        uintptr_t callsiteInfo; // pointer to static callsite metadata
+        CallsiteInfo* callsiteInfo; // pointer to static callsite metadata
         // uint32_t threadID;
     };
 

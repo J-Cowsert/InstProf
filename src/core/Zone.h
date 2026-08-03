@@ -16,12 +16,12 @@ namespace instprof {
     class ZoneScope {
     public:
         
-        explicit IP_FORCE_INLINE ZoneScope(const CallsiteInfo* info) {
+        explicit IP_FORCE_INLINE ZoneScope(CallsiteInfo* info) {
 
             EventItem e;
             e.tag.type = EventType::ZoneBegin;
             e.zoneBegin.time         = GetTime();
-            e.zoneBegin.callsiteInfo = reinterpret_cast<uintptr_t>(info);
+            e.zoneBegin.callsiteInfo = info;
             // e.zoneBegin.threadID     = GetCurrentThreadID();
             Profiler::Get().EnqueueEvent(e);
         }

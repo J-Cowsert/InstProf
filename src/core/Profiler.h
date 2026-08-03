@@ -17,7 +17,7 @@ namespace instprof {
 
     struct ZoneRecord {
 
-        uintptr_t callsiteInfo;
+        CallsiteInfo* callsiteInfo;
         int64_t  startTime;
         int64_t  endTime;
         int64_t  inclusiveTime;         // total duration (end-start)
@@ -28,7 +28,7 @@ namespace instprof {
 
     struct ActiveZone {
 
-        uintptr_t callsiteInfo; 
+        CallsiteInfo* callsiteInfo; 
         int64_t  startTime;
         int64_t  childInclusiveTime = 0; // total time of direct children
         uint16_t depth = 0;
@@ -78,7 +78,8 @@ namespace instprof {
 
             ThreadEntry* entry = new ThreadEntry{
                 .EventQueue = {},
-                .ThreadID = GetCurrentThreadID()
+                .State = {},
+                .ThreadID = GetCurrentThreadID(),
             };
 
             {
@@ -106,7 +107,7 @@ namespace instprof {
         int64_t m_Epoch;
         uint32_t m_MainThreadID;
 
-        std::atomic<int32_t> m_RegisteredThreadCount{0};
+        std::atomic<uint32_t> m_RegisteredThreadCount{0};
         std::atomic<bool> m_Running{false}, m_Stop{false}; // m_running doesnt need to be atomic
 
         // Debug
